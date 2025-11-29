@@ -1,36 +1,62 @@
 <?php
-class User {
-    private $conn;
-    public $id, $name, $email, $password, $program_studi, $semester, $role;
+session_start();
+require_once 'config.php';
+require_once 'db.php';
+require_once 'ModelUser.php';
 
-    public function __construct($db) { $this->conn = $db; }
+$error = '';
 
-    public function register() {
-        $query = "INSERT INTO users SET name=:name, email=:email, password=:password, program_studi=:program_studi, semester=:semester, role=:role";
-        $stmt = $this->conn->prepare($query);
-        $this->password = password_hash($this->password, PASSWORD_BCRYPT);
-        $stmt->bindParam(":name", $this->name);
-        $stmt->bindParam(":email", $this->email);
-        $stmt->bindParam(":password", $this->password);
-        $stmt->bindParam(":program_studi", $this->program_studi);
-        $stmt->bindParam(":semester", $this->semester);
-        $stmt->bindParam(":role", $this->role);
-        return $stmt->execute();
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $db = (new Database())->getConnection();
+    $user = new User($db);
+    $user->email = $_POST['email'] ?? '';
+    $user->password = $_POST['password'] ?? '';
 
-    public function login() {
-        $query = "SELECT * FROM users WHERE email = :email LIMIT 1";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(":email", $this->email);
-        $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        if($user && password_verify($this->password, $user['password'])) {
-            $this->id = $user['id'];
-            $this->name = $user['name'];
-            $this->role = $user['role'];
-            return true;
-        }
-        return false;
+    if ($user->login()) {
+        $_SESSION['user_id'] = $user->id;
+        $_SESSION['name']    = $user->name;
+
+        header('Location: ' . BASE_PATH . '/dashboard.php');
+        exit;
+    } else {
+        $error = 'Email atau password salah.';
     }
 }
 ?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - JagoNugas</title>
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+</head>
+<body class="auth-page">
+    <div class="auth-card">
+        <h1 class="auth-title">Login Akun</h1>
+        <p class="auth-subtitle">Masuk untuk lanjut ngobrol sama mentor dan liat riwayat chat lo.</p>
+
+        <?php if (!empty($error)): ?>
+            <p style="color:#e53e3e; font-size:0.9rem; margin-bottom:12px;">
+                <?php echo htmlspecialchars($error); ?>
+            </p>
+        <?php endif; ?>
+
+        <form method="POST" action="" class="auth-form">
+            <div>
+                <label for="email">Email</label>
+                <input class="auth-input" type="email" id="email" name="email" required>
+            </div>
+            <div>
+                <label for="password">Password</label>
+                <input class="auth-input" type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary auth-button">Login</button>
+        </form>
+
+        <p class="auth-footer-text">
+            Belum punya akun?
+            <a href="<?php echo BASE_PATH; ?>/register.php">Daftar</a>
+        </p>
+    </div>
+</body>
+</html>

@@ -1,7 +1,8 @@
 <?php
+session_start();
 require_once 'config.php';
-require 'db.php';
-require 'ModelUser.php';
+require_once 'db.php';
+require_once 'ModelUser.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $db = (new Database())->getConnection();
