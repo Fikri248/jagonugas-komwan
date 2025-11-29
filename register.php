@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $user->role = 'student';
 
     if ($user->register()) {
-        header("Location: " . BASE_PATH . "/login");
+        header("Location: " . BASE_PATH . "/login.php");
         exit;
     } else {
         $error = "Registrasi gagal. Coba lagi.";
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <p class="auth-footer-text">
             Sudah punya akun?
-            <a href="<?php echo BASE_PATH; ?>/login">Login</a>
+            <a href="<?php echo BASE_PATH; ?>/login.php">Login</a>
         </p>
         <p class="auth-note">Dengan daftar, lo setuju sama ketentuan penggunaan JagoNugas.</p>
     </div>

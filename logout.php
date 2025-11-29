@@ -4,5 +4,6 @@ require_once 'config.php';
 session_unset();
 session_destroy();
 
-header("Location: " . BASE_PATH . "/");
+header("Location: " . BASE_PATH . "/index.php");
+
 exit;

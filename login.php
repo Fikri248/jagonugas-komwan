@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($user->login()) {
         $_SESSION['user_id'] = $user->id;
         $_SESSION['name'] = $user->name;
-        header("Location: " . BASE_PATH . "/dashboard");
+        header("Location: " . BASE_PATH . "/dashboard.php");
         exit;
     } else {
         $error = "Email atau password salah.";
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <p class="auth-footer-text">
             Belum punya akun?
-            <a href="<?php echo BASE_PATH; ?>/register">Daftar</a>
+            <a href="<?php echo BASE_PATH; ?>/register.php">Daftar</a>
         </p>
     </div>
 </body>

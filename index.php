@@ -21,8 +21,8 @@
                 <a href="#testimonials">Testimoni</a>
             </div>
             <div class="nav-buttons">
-                <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-text">Login</a>
-                <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary">Register</a>
+                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-text">Login</a>
+                <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary">Register</a>
             </div>
         </div>
     </nav>
