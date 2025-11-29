@@ -1,8 +1,8 @@
 <?php
 session_start();
 require_once 'config.php';
-require_once 'db.php';
-require_once 'ModelUser.php';
+require 'db.php';
+require 'ModelDiskusi.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: " . BASE_PATH . "/login");
