@@ -1,10 +1,12 @@
 <?php
+session_start();
 require_once 'config.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
+
 
 $name = $_SESSION['name'] ?? 'User';
 $gemBalance = 0;
@@ -46,8 +48,8 @@ $gemBalance = 0;
     </div>
             <!-- menu text baru -->
             <nav class="jn-topbar-links">
-                <a href="/jagonugas-native/mentor">Mentor</a>
-                <a href="/jagonugas-native/membership">Membership</a>
+                <a href="<?php echo BASE_PATH; ?>/mentor.php">Mentor</a>
+                <a href="<?php echo BASE_PATH; ?>/membership.php">Membership</a>
             </nav>
 
             <button type="button" class="jn-topbar-icon">🔔</button>
@@ -64,7 +66,7 @@ $gemBalance = 0;
                 <div class="jn-topbar-menu">
                     <a href="#">Histori Chat</a>
                     <a href="#">Pengaturan Akun</a>
-                    <a href="/jagonugas-native/logout">Keluar</a>
+                    <a href="<?php echo BASE_PATH; ?>/logout.php">Keluar</a>
                 </div>
             </div>
         </div>
