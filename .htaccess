@@ -1,11 +1,19 @@
-<IfModule mod_rewrite.c>
-    RewriteEngine On
+Options -Indexes
+DirectoryIndex app.php
 
-    # Jangan ubah file/folder yang memang ada
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
-    RewriteRule ^ - [L]
+RewriteEngine On
 
-    # Semua request lain dilempar ke router (app.php)
-    RewriteRule ^ app.php [L]
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+RewriteRule ^ app.php [QSA,L]
+
+# ===== DEV ONLY: matikan cache biar CSS/JS/IMG selalu fresh =====
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|webp|ico)$">
+    Header always set Cache-Control "no-store, no-cache, max-age=0, must-revalidate"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+  </FilesMatch>
 </IfModule>

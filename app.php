@@ -1,40 +1,55 @@
 <?php
 session_start();
-require_once 'config.php';
+require_once __DIR__ . '/config.php';
 
-$request = strtok($_SERVER['REQUEST_URI'], '?');
-$request = str_replace(BASE_PATH, '', $request);
-if ($request === '' || $request === '/') {
-    $request = '/';
+// Ambil path dari URL tanpa query string
+$requestUri = strtok($_SERVER['REQUEST_URI'], '?');
+
+// Hilangkan BASE_PATH (misal: /jagonugas-native) dari depan URL
+$basePath = BASE_PATH ?? '';
+if ($basePath !== '' && strpos($requestUri, $basePath) === 0) {
+    $request = substr($requestUri, strlen($basePath));
+} else {
+    $request = $requestUri;
 }
 
+// Normalisasi:
+// - kalau kosong, /, atau /app.php  -> anggap sebagai halaman utama
+if ($request === '' || $request === false || $request === '/' || $request === '/app.php') {
+    $request = '/';
+} else {
+    // selain itu, buang trailing slash
+    $request = rtrim($request, '/');
+}
+
+// Routing sederhana
 switch ($request) {
     case '/':
-        require 'index.php';
+        require __DIR__ . '/pages/index.php';
         break;
 
     case '/login':
-        require 'login.php';
+        require __DIR__ . '/pages/login.php';
         break;
 
     case '/register':
-        require 'register.php';
+        require __DIR__ . '/pages/register.php';
         break;
 
     case '/dashboard':
-        require 'dashboard.php';
+        require __DIR__ . '/pages/dashboard.php';
         break;
 
     case '/diskusi':
-        require 'halaman-diskusi.php';
+        require __DIR__ . '/pages/diskusi.php';
         break;
 
     case '/logout':
-        require 'logout.php';
+        require __DIR__ . '/pages/logout.php';
         break;
 
     default:
         http_response_code(404);
-        echo "404 Not Found (route: $request)";
+        echo "404 Not Found (route: " . htmlspecialchars($request) . ")";
         break;
 }
