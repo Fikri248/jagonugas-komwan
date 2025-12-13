@@ -1,5 +1,4 @@
 <?php
-session_start();
 require_once 'config.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -66,7 +65,7 @@ $gemBalance = 0;
                 <div class="jn-topbar-menu">
                     <a href="#">Histori Chat</a>
                     <a href="#">Pengaturan Akun</a>
-                    <a href="<?php echo BASE_PATH; ?>/logout.php">Keluar</a>
+                    <a href="<?php echo BASE_PATH; ?>/logout">Keluar</a>
                 </div>
             </div>
         </div>

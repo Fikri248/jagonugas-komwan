@@ -1,0 +1,6 @@
+# uploads/transkrip/.htaccess
+# Prevent PHP execution
+<FilesMatch "\.php$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>

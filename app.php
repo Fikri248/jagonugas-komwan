@@ -1,55 +1,81 @@
 <?php
-session_start();
+// app.php
+
 require_once __DIR__ . '/config.php';
 
-// Ambil path dari URL tanpa query string
-$requestUri = strtok($_SERVER['REQUEST_URI'], '?');
+$request = $_SERVER['REQUEST_URI'];
+$basePath = BASE_PATH;
 
-// Hilangkan BASE_PATH (misal: /jagonugas-native) dari depan URL
-$basePath = BASE_PATH ?? '';
-if ($basePath !== '' && strpos($requestUri, $basePath) === 0) {
-    $request = substr($requestUri, strlen($basePath));
-} else {
-    $request = $requestUri;
+// Remove base path dan query string
+$request = str_replace($basePath, '', $request);
+$request = strtok($request, '?');
+$request = trim($request, '/');
+
+// Kalau kosong, berarti home
+if ($request === '') {
+    $request = 'home';
 }
 
-// Normalisasi:
-// - kalau kosong, /, atau /app.php  -> anggap sebagai halaman utama
-if ($request === '' || $request === false || $request === '/' || $request === '/app.php') {
-    $request = '/';
-} else {
-    // selain itu, buang trailing slash
-    $request = rtrim($request, '/');
-}
-
-// Routing sederhana
 switch ($request) {
-    case '/':
-        require __DIR__ . '/pages/index.php';
+    case 'home':
+    case '':
+        require 'pages/index.php';
+        break;
+    
+    case 'login':
+        require 'pages/login.php';
+        break;
+    
+    case 'register':
+        require 'pages/register.php';
+        break;
+    
+    case 'logout':
+        require 'pages/logout.php';
+        break;
+    
+    case 'dashboard':
+        require 'pages/dashboard.php';
+        break;
+    
+    case 'diskusi':
+        require 'pages/diskusi.php';
+        break;
+    
+    // Tambahin ini 👇
+    case 'forgot-password':
+        require 'pages/forgot-password.php';
+        break;
+    
+    case 'reset-password':
+        require 'pages/reset-password.php';
         break;
 
-    case '/login':
-        require __DIR__ . '/pages/login.php';
-        break;
+    // Tambahkan di switch case app.php
 
-    case '/register':
-        require __DIR__ . '/pages/register.php';
-        break;
+case 'mentor/login':
+    require 'pages/mentor/login.php';
+    break;
 
-    case '/dashboard':
-        require __DIR__ . '/pages/dashboard.php';
-        break;
+case 'mentor/register':
+    require 'pages/mentor/register.php';
+    break;
 
-    case '/diskusi':
-        require __DIR__ . '/pages/diskusi.php';
-        break;
+case 'mentor/dashboard':
+    require 'pages/mentor/dashboard.php';
+    break;
 
-    case '/logout':
-        require __DIR__ . '/pages/logout.php';
-        break;
+case 'admin/dashboard':
+    require 'pages/admin/dashboard.php';
+    break;
 
+    case 'admin/mentors':
+    require 'pages/admin/mentors.php';
+    break;
+
+    
     default:
         http_response_code(404);
-        echo "404 Not Found (route: " . htmlspecialchars($request) . ")";
+        echo "404 Not Found (route: /$request)";
         break;
 }

@@ -10,13 +10,8 @@ if (!defined('BASE_PATH')) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JagoNugas Kelompok 2</title>
-
-    <!-- CSS utama JagoNugas -->
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
-
-    <!-- Bootstrap Icons (ikon saja, bukan Bootstrap CSS) -->
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body>
     <!-- Navbar -->
@@ -59,21 +54,6 @@ if (!defined('BASE_PATH')) {
                         </svg>
                     </a>
                 </div>
-
-                <div class="hero-stats">
-                    <div class="stat">
-                        <div class="stat-number">5,000+</div>
-                        <div class="stat-label">Mahasiswa Aktif</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">500+</div>
-                        <div class="stat-label">Mentor Terverifikasi</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">4.9/5</div>
-                        <div class="stat-label">Rating Pengguna</div>
-                    </div>
-                </div>
             </div>
 
             <!-- Kanan: logo besar -->
@@ -83,14 +63,22 @@ if (!defined('BASE_PATH')) {
                 </div>
             </div>
         </div>
-    </section>
-
-    <!-- Trusted By Section -->
-    <section class="trusted-by">
+        
+        <!-- Stats di bawah hero content -->
         <div class="container">
-            <p class="trusted-label">Dipercaya oleh dosen</p>
-            <div class="universities">
-                <span>Mochamad Nizar Palefi Ma'ady</span>
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-number">5,000+</div>
+                    <div class="stat-label">Mahasiswa Aktif</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">500+</div>
+                    <div class="stat-label">Mentor Terverifikasi</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">4.9/5</div>
+                    <div class="stat-label">Rating Pengguna</div>
+                </div>
             </div>
         </div>
     </section>
@@ -156,6 +144,7 @@ if (!defined('BASE_PATH')) {
             <div class="section-header">
                 <span class="section-badge">Cara Kerja</span>
                 <h2 class="section-title">Mulai Dalam 3 Langkah Mudah</h2>
+                <p class="section-subtitle">Proses simpel tanpa ribet, langsung bisa belajar</p>
             </div>
             <div class="steps-timeline">
                 <div class="step-corporate">
@@ -183,48 +172,49 @@ if (!defined('BASE_PATH')) {
             <div class="section-header">
                 <span class="section-badge">Paket Gem</span>
                 <h2 class="section-title">Harga Transparan, Tanpa Biaya Tersembunyi</h2>
+                <p class="section-subtitle">Pilih paket yang sesuai kebutuhan belajar lo</p>
             </div>
             <div class="pricing-grid">
                 <div class="pricing-card">
                     <div class="pricing-header">
                         <h3>Basic</h3>
                         <div class="price">Rp 10.000</div>
-                        <div class="gem-amount">4,500 Gem</div>
+                        <div class="gem-amount">💎 4,500 Gem</div>
                     </div>
                     <ul class="pricing-features">
-                        <li>✓ Akses Forum Diskusi</li>
-                        <li>✓ 3-4 Session Konsultasi</li>
-                        <li>✓ Chat dengan Mentor</li>
-                        <li>✓ Upload File (JPG/PDF)</li>
+                        <li><i class="bi bi-check-lg"></i> Akses Forum Diskusi</li>
+                        <li><i class="bi bi-check-lg"></i> 3-4 Session Konsultasi</li>
+                        <li><i class="bi bi-check-lg"></i> Chat dengan Mentor</li>
+                        <li><i class="bi bi-check-lg"></i> Upload File (JPG/PDF)</li>
                     </ul>
                     <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
                 </div>
                 <div class="pricing-card featured">
-                    <div class="popular-badge">Paling Populer</div>
+                    <div class="popular-badge">⭐ Paling Populer</div>
                     <div class="pricing-header">
                         <h3>Pro</h3>
                         <div class="price">Rp 25.000</div>
-                        <div class="gem-amount">12,500 Gem</div>
+                        <div class="gem-amount">💎 12,500 Gem</div>
                     </div>
                     <ul class="pricing-features">
-                        <li>✓ Semua Fitur Basic</li>
-                        <li>✓ 10-12 Session Konsultasi</li>
-                        <li>✓ Priority Support</li>
-                        <li>✓ Bonus 500 Gem</li>
+                        <li><i class="bi bi-check-lg"></i> Semua Fitur Basic</li>
+                        <li><i class="bi bi-check-lg"></i> 10-12 Session Konsultasi</li>
+                        <li><i class="bi bi-check-lg"></i> Priority Support</li>
+                        <li><i class="bi bi-check-lg"></i> Bonus 500 Gem</li>
                     </ul>
-                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
+                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-full">Pilih Paket</a>
                 </div>
                 <div class="pricing-card">
                     <div class="pricing-header">
                         <h3>Plus</h3>
                         <div class="price">Rp 50.000</div>
-                        <div class="gem-amount">27,000 Gem</div>
+                        <div class="gem-amount">💎 27,000 Gem</div>
                     </div>
                     <ul class="pricing-features">
-                        <li>✓ Semua Fitur Pro</li>
-                        <li>✓ 25+ Session Konsultasi</li>
-                        <li>✓ Dedicated Support</li>
-                        <li>✓ Bonus 2,000 Gem</li>
+                        <li><i class="bi bi-check-lg"></i> Semua Fitur Pro</li>
+                        <li><i class="bi bi-check-lg"></i> 25+ Session Konsultasi</li>
+                        <li><i class="bi bi-check-lg"></i> Dedicated Support</li>
+                        <li><i class="bi bi-check-lg"></i> Bonus 2,000 Gem</li>
                     </ul>
                     <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
                 </div>
@@ -238,9 +228,9 @@ if (!defined('BASE_PATH')) {
             <div class="section-header">
                 <span class="section-badge">Testimoni</span>
                 <h2 class="section-title">Apa Kata Mahasiswa Lain?</h2>
+                <p class="section-subtitle">Ribuan mahasiswa sudah terbantu dengan JagoNugas</p>
             </div>
             <div class="testimonials-grid">
-                <!-- Testimoni 1 -->
                 <div class="testimonial-card">
                     <div class="stars">
                         <i class="bi bi-star-fill"></i>
@@ -261,7 +251,6 @@ if (!defined('BASE_PATH')) {
                     </div>
                 </div>
 
-                <!-- Testimoni 2 -->
                 <div class="testimonial-card">
                     <div class="stars">
                         <i class="bi bi-star-fill"></i>
@@ -282,7 +271,6 @@ if (!defined('BASE_PATH')) {
                     </div>
                 </div>
 
-                <!-- Testimoni 3 -->
                 <div class="testimonial-card">
                     <div class="stars">
                         <i class="bi bi-star-fill"></i>
@@ -306,7 +294,6 @@ if (!defined('BASE_PATH')) {
         </div>
     </section>
 
-
     <!-- Footer -->
     <footer class="footer-corporate">
         <div class="container">
@@ -320,7 +307,7 @@ if (!defined('BASE_PATH')) {
                         <h4>Produk</h4>
                         <a href="#features">Fitur</a>
                         <a href="#pricing">Harga</a>
-                        <a href="#">Jadi Mentor</a>
+                        <a href="<?php echo BASE_PATH; ?>/mentor/register">Jadi Mentor</a>
                     </div>
                     <div class="footer-column">
                         <h4>Lainnya</h4>
@@ -339,9 +326,9 @@ if (!defined('BASE_PATH')) {
             <div class="footer-bottom">
                 <p>&copy; 2025 JagoNugas. All rights reserved.</p>
                 <div class="social-links">
-                    <a href="#">Instagram</a>
-                    <a href="#">Twitter</a>
-                    <a href="#">Tiktok</a>
+                    <a href="#"><i class="bi bi-instagram"></i></a>
+                    <a href="#"><i class="bi bi-twitter-x"></i></a>
+                    <a href="#"><i class="bi bi-tiktok"></i></a>
                 </div>
             </div>
         </div>
