@@ -1,11 +1,22 @@
-<?php require_once 'config.php'; ?>
+<?php
+if (!defined('BASE_PATH')) {
+  require_once __DIR__ . '/../config.php';
+}
+?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JagoNugas Kelompok 2</title>
-   <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+
+    <!-- CSS utama JagoNugas -->
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+
+    <!-- Bootstrap Icons (ikon saja, bukan Bootstrap CSS) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body>
     <!-- Navbar -->
@@ -21,8 +32,8 @@
                 <a href="#testimonials">Testimoni</a>
             </div>
             <div class="nav-buttons">
-                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-text">Login</a>
-                <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary">Register</a>
+                <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-text">Login</a>
+                <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary">Register</a>
             </div>
         </div>
     </nav>
@@ -31,20 +42,23 @@
     <section class="hero-corporate">
         <div class="container hero-two-column">
             <div class="hero-content">
-                <div class="badge">🚀 Dipercaya 5,000+ Mahasiswa</div>
+                <div class="badge">
+                    <i class="bi bi-rocket-takeoff-fill"></i>
+                    &nbsp;Dipercaya 5,000+ Mahasiswa
+                </div>
                 <h1 class="hero-title">Selesain Tugas lo dengan Bantuan Kakak Tingkat Terbaik</h1>
                 <p class="hero-description">
                     Platform tutoring terpercaya untuk mahasiswa Telkom University Surabaya. 
                     Konsultasi langsung dengan mentor berpengalaman, harga terjangkau, hasil terbukti.
                 </p>
                 <div class="hero-cta">
-    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-large">
-        <span>Mulai Gratis</span>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
-        </svg>
-    </a>
-</div>
+                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-large">
+                        <span>Mulai Gratis</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
+                        </svg>
+                    </a>
+                </div>
 
                 <div class="hero-stats">
                     <div class="stat">
@@ -65,7 +79,7 @@
             <!-- Kanan: logo besar -->
             <div class="hero-logo-wrapper">
                 <div class="hero-logo-card">
-                    <img src="<?php echo BASE_PATH; ?>/logo.png" alt="JagoNugas" class="hero-logo-img">
+                    <img src="<?php echo BASE_PATH; ?>/assets/logo.png" alt="JagoNugas" class="hero-logo-img">
                 </div>
             </div>
         </div>
@@ -91,33 +105,44 @@
             </div>
             <div class="features-grid-3">
                 <div class="feature-card-corporate">
-                    <div class="feature-icon-corporate">💬</div>
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-chat-dots-fill"></i>
+                    </div>
                     <h3>Forum Diskusi Real-Time</h3>
                     <p>Tanya jawab langsung dengan sesama mahasiswa dan mentor yang lagi online. Response cepat, solusi instan.</p>
                 </div>
                 <div class="feature-card-corporate">
-                    <div class="feature-icon-corporate">👨‍🏫</div>
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-mortarboard-fill"></i>
+                    </div>
                     <h3>Mentor Terverifikasi</h3>
                     <p>Semua mentor sudah melalui proses verifikasi KHS. Dijamin berkualitas.</p>
                 </div>
                 <div class="feature-card-corporate">
-                    <div class="feature-icon-corporate">💎</div>
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-gem"></i>
+                    </div>
                     <h3>Sistem Gem Fleksibel</h3>
                     <p>Top-up gem sesuai budget, pakai kapan aja. Tidak ada subscription bulanan yang membebani.</p>
                 </div>
                 <div class="feature-card-corporate">
-                    <div class="feature-icon-corporate">⭐</div>
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-star-fill"></i>
+                    </div>
                     <h3>Rating & Review Transparan</h3>
                     <p>Lihat track record mentor dari review real mahasiswa. Pilih yang paling cocok dengan lo.</p>
                 </div>
                 <div class="feature-card-corporate">
-    <div class="feature-icon-corporate">📝</div>
-    <h3>History Chat Mentor</h3>
-    <p>Liat ulang semua percakapan lo dengan mentor, lengkap dengan waktu dan topik yang pernah dibahas.</p>
-</div>
-
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-chat-left-text-fill"></i>
+                    </div>
+                    <h3>History Chat Mentor</h3>
+                    <p>Liat ulang semua percakapan lo dengan mentor, lengkap dengan waktu dan topik yang pernah dibahas.</p>
+                </div>
                 <div class="feature-card-corporate">
-                    <div class="feature-icon-corporate">🔒</div>
+                    <div class="feature-icon-corporate">
+                        <i class="bi bi-shield-lock-fill"></i>
+                    </div>
                     <h3>Pembayaran Aman</h3>
                     <p>Tersedia berbagai metode pembayaran. Data lo 100% aman & terenkripsi.</p>
                 </div>
@@ -172,7 +197,7 @@
                         <li>✓ Chat dengan Mentor</li>
                         <li>✓ Upload File (JPG/PDF)</li>
                     </ul>
-                   <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
+                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
                 </div>
                 <div class="pricing-card featured">
                     <div class="popular-badge">Paling Populer</div>
@@ -215,42 +240,72 @@
                 <h2 class="section-title">Apa Kata Mahasiswa Lain?</h2>
             </div>
             <div class="testimonials-grid">
+                <!-- Testimoni 1 -->
                 <div class="testimonial-card">
-                    <div class="stars">⭐⭐⭐⭐⭐</div>
+                    <div class="stars">
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                    </div>
                     <p>"Platform ini lifesaver banget! Gara-gara JagoNugas, gw berhasil naikin IPK dari 2.8 ke 3.5 dalam 2 semester."</p>
                     <div class="testimonial-author">
-                        <div class="author-avatar">R</div>
-                        <div>
-                            <div class="author-name">Rina Santoso</div>
-                            <div class="author-info">Informatika, Semester 5</div>
+                        <div class="author-avatar">
+                            <img src="<?php echo BASE_PATH; ?>/assets/profil-raihan.jpeg" alt="Foto Profil Raihan">
+                        </div>
+                        <div class="author-meta">
+                            <div class="author-name">Mohammad Raihan Riski</div>
+                            <div class="author-info">Sistem Informasi, Semester 5</div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Testimoni 2 -->
                 <div class="testimonial-card">
-                    <div class="stars">⭐⭐⭐⭐⭐</div>
+                    <div class="stars">
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                    </div>
                     <p>"Mentornya sabar dan jelasinnya detail. Harga juga jauh lebih murah dari les privat biasa. Recommended!"</p>
                     <div class="testimonial-author">
-                        <div class="author-avatar">B</div>
-                        <div>
-                            <div class="author-name">Budi Prasetyo</div>
-                            <div class="author-info">Teknik Elektro, Semester 3</div>
+                        <div class="author-avatar">
+                            <img src="<?php echo BASE_PATH; ?>/assets/profil-rizky.jpg" alt="Foto Profil Muhammad Rizky">
+                        </div>
+                        <div class="author-meta">
+                            <div class="author-name">Muhammad Rizky Ardian</div>
+                            <div class="author-info">Sistem Informasi, Semester 5</div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Testimoni 3 -->
                 <div class="testimonial-card">
-                    <div class="stars">⭐⭐⭐⭐⭐</div>
+                    <div class="stars">
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                        <i class="bi bi-star-fill"></i>
+                    </div>
                     <p>"Forum diskusinya helpful banget. Gw bisa dapet jawaban cepet tanpa perlu booking mentor dulu. Love it!"</p>
                     <div class="testimonial-author">
-                        <div class="author-avatar">A</div>
-                        <div>
-                            <div class="author-name">Andi Wijaya</div>
-                            <div class="author-info">Sistem Informasi, Semester 4</div>
+                        <div class="author-avatar">
+                            <img src="<?php echo BASE_PATH; ?>/assets/profil-fikri.jpeg" alt="Foto Profil Fikri">
+                        </div>
+                        <div class="author-meta">
+                            <div class="author-name">Mohamad Fikri Isfahani</div>
+                            <div class="author-info">Sistem Informasi, Semester 5</div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
+
 
     <!-- Footer -->
     <footer class="footer-corporate">
