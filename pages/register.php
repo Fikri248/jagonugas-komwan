@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../ModelUser.php';
+require_once __DIR__ . '/../includes/NotificationHelper.php';
 
 $error = '';
 $success = '';
@@ -51,7 +52,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = $user->register();
 
         if ($result['success']) {
-            $success = 'Registrasi berhasil! Silakan login.';
+            $newUserId = $result['user_id'];
+            $bonusGems = $result['gems'] ?? 75;
+            
+            // Kirim notifikasi
+            $notif = new NotificationHelper($db);
+            
+            // 1. Notifikasi Welcome
+            $notif->welcome($newUserId);
+            
+            // 2. Notifikasi Bonus Gem
+            $notif->create(
+                $newUserId,
+                'gem_bonus',
+                'Selamat! Kamu mendapat ' . $bonusGems . ' Gem gratis sebagai hadiah pendaftaran. Gunakan untuk bertanya di forum!',
+                null,
+                null
+            );
+            
+            $success = 'Registrasi berhasil! Kamu mendapat ' . $bonusGems . ' Gem gratis. Silakan login.';
         } else {
             $error = $result['message'];
         }
@@ -65,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daftar - JagoNugas</title>
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="auth-page">
     <div class="auth-card">
@@ -80,11 +100,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p class="auth-subtitle">Daftar untuk mulai belajar bareng mentor terbaik</p>
 
         <?php if ($error): ?>
-            <div class="alert alert-error"><?php echo htmlspecialchars($error); ?></div>
+            <div class="alert alert-error">
+                <i class="bi bi-exclamation-circle"></i> <?php echo htmlspecialchars($error); ?>
+            </div>
         <?php endif; ?>
 
         <?php if ($success): ?>
-            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+            <div class="alert alert-success">
+                <i class="bi bi-gift-fill"></i> <?php echo htmlspecialchars($success); ?>
+            </div>
         <?php endif; ?>
 
         <form method="POST" class="auth-form">
@@ -164,6 +188,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        placeholder="Ulangi password" required>
             </div>
 
+            <!-- Bonus Info -->
+            <div class="register-bonus-info">
+                <i class="bi bi-gift-fill"></i>
+                <span>Daftar sekarang & dapatkan <strong>75 Gem gratis!</strong></span>
+            </div>
+
             <button type="submit" class="btn btn-primary auth-button">Daftar Sekarang</button>
         </form>
 
@@ -182,37 +212,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const hiddenInput = select.querySelector('input[type="hidden"]');
             const selectText = select.querySelector('.select-text');
             
-            // Toggle dropdown
             selected.addEventListener('click', function(e) {
                 e.stopPropagation();
-                
-                // Close other dropdowns
                 customSelects.forEach(s => {
                     if (s !== select) s.classList.remove('active');
                 });
-                
                 select.classList.toggle('active');
             });
             
-            // Handle item selection
             const selectItems = select.querySelectorAll('.select-item');
             selectItems.forEach(item => {
                 item.addEventListener('click', function() {
                     const value = this.dataset.value;
                     const text = this.textContent.trim();
-                    
-                    // Update hidden input
                     hiddenInput.value = value;
-                    
-                    // Update display text
                     selectText.textContent = text;
                     selectText.classList.add('has-value');
-                    
-                    // Update selected state
                     selectItems.forEach(i => i.classList.remove('selected'));
                     this.classList.add('selected');
-                    
-                    // Close dropdown with small delay for animation
                     setTimeout(() => {
                         select.classList.remove('active');
                     }, 150);
@@ -220,14 +237,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
         });
         
-        // Close dropdown when clicking outside
         document.addEventListener('click', function() {
             customSelects.forEach(select => {
                 select.classList.remove('active');
             });
         });
         
-        // Keyboard navigation
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 customSelects.forEach(select => {
