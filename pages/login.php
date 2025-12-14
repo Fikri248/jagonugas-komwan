@@ -45,6 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['name'] = $result['user']['name'];
                 $_SESSION['email'] = $result['user']['email'];
                 $_SESSION['role'] = $result['user']['role'];
+                $_SESSION['login_time'] = time(); // TAMBAH INI - Simpan waktu login
+                $_SESSION['avatar'] = $result['user']['avatar'] ?? null;
+
 
                 // Redirect berdasarkan role
                 switch ($result['user']['role']) {

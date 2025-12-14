@@ -14,6 +14,9 @@ class User {
     public $semester;
     public $role;
 
+    // Bonus gem untuk user baru
+    const SIGNUP_BONUS_GEMS = 75;
+
     public function __construct($db) {
         $this->conn = $db;
     }
@@ -26,8 +29,8 @@ class User {
         }
 
         $query = "INSERT INTO " . $this->table . " 
-                  (name, email, password, program_studi, semester, role) 
-                  VALUES (:name, :email, :password, :program_studi, :semester, 'student')";
+                  (name, email, password, program_studi, semester, role, gems) 
+                  VALUES (:name, :email, :password, :program_studi, :semester, 'student', :gems)";
 
         $stmt = $this->conn->prepare($query);
 
@@ -36,6 +39,7 @@ class User {
         $this->email = htmlspecialchars(strip_tags($this->email));
         $this->program_studi = htmlspecialchars(strip_tags($this->program_studi));
         $hashedPassword = password_hash($this->password, PASSWORD_DEFAULT);
+        $bonusGems = self::SIGNUP_BONUS_GEMS;
 
         // Bind
         $stmt->bindParam(':name', $this->name);
@@ -43,46 +47,54 @@ class User {
         $stmt->bindParam(':password', $hashedPassword);
         $stmt->bindParam(':program_studi', $this->program_studi);
         $stmt->bindParam(':semester', $this->semester);
+        $stmt->bindParam(':gems', $bonusGems);
 
         if ($stmt->execute()) {
-            return ['success' => true, 'message' => 'Registrasi berhasil'];
+            $userId = $this->conn->lastInsertId();
+            return [
+                'success' => true, 
+                'message' => 'Registrasi berhasil',
+                'user_id' => $userId,
+                'gems' => $bonusGems
+            ];
         }
         return ['success' => false, 'message' => 'Registrasi gagal, coba lagi'];
     }
 
     // LOGIN - Verify credentials
     public function login() {
-    $query = "SELECT id, name, email, password, role, program_studi, semester, is_verified 
-              FROM " . $this->table . " 
-              WHERE email = :email 
-              LIMIT 1";
+        $query = "SELECT id, name, email, password, role, program_studi, semester, is_verified, gems, avatar 
+                  FROM " . $this->table . " 
+                  WHERE email = :email 
+                  LIMIT 1";
 
-    $stmt = $this->conn->prepare($query);
-    $stmt->bindParam(':email', $this->email);
-    $stmt->execute();
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':email', $this->email);
+        $stmt->execute();
 
-    if ($stmt->rowCount() > 0) {
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($stmt->rowCount() > 0) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (password_verify($this->password, $row['password'])) {
-            return [
-                'success' => true,
-                'user' => [
-                    'id' => $row['id'],
-                    'name' => $row['name'],
-                    'email' => $row['email'],
-                    'role' => $row['role'],
-                    'program_studi' => $row['program_studi'],
-                    'semester' => $row['semester'],
-                    'is_verified' => $row['is_verified']
-                ]
-            ];
+            if (password_verify($this->password, $row['password'])) {
+                return [
+                    'success' => true,
+                    'user' => [
+                        'id' => $row['id'],
+                        'name' => $row['name'],
+                        'email' => $row['email'],
+                        'role' => $row['role'],
+                        'program_studi' => $row['program_studi'],
+                        'semester' => $row['semester'],
+                        'is_verified' => $row['is_verified'],
+                        'gems' => $row['gems'],
+                        'avatar' => $row['avatar']
+                    ]
+                ];
+            }
         }
+
+        return ['success' => false, 'message' => 'Email atau password salah'];
     }
-
-    return ['success' => false, 'message' => 'Email atau password salah'];
-}
-
 
     // Check if email exists
     public function emailExists() {
@@ -152,37 +164,45 @@ class User {
         return ['success' => false, 'message' => 'Gagal mengubah password'];
     }
 
+    // REGISTER MENTOR
     public function registerMentor($expertise = [], $bio = '', $transkripPath = '') {
-    if ($this->emailExists()) {
-        return ['success' => false, 'message' => 'Email sudah terdaftar'];
+        if ($this->emailExists()) {
+            return ['success' => false, 'message' => 'Email sudah terdaftar'];
+        }
+
+        $query = "INSERT INTO " . $this->table . " 
+                  (name, email, password, program_studi, semester, role, expertise, bio, transkrip_path, is_verified, gems) 
+                  VALUES (:name, :email, :password, :program_studi, :semester, 'mentor', :expertise, :bio, :transkrip_path, 0, :gems)";
+
+        $stmt = $this->conn->prepare($query);
+
+        $this->name = htmlspecialchars(strip_tags($this->name));
+        $this->email = htmlspecialchars(strip_tags($this->email));
+        $this->program_studi = htmlspecialchars(strip_tags($this->program_studi));
+        $hashedPassword = password_hash($this->password, PASSWORD_DEFAULT);
+        $expertiseJson = json_encode($expertise);
+        $bio = htmlspecialchars(strip_tags($bio));
+        $bonusGems = self::SIGNUP_BONUS_GEMS;
+
+        $stmt->bindParam(':name', $this->name);
+        $stmt->bindParam(':email', $this->email);
+        $stmt->bindParam(':password', $hashedPassword);
+        $stmt->bindParam(':program_studi', $this->program_studi);
+        $stmt->bindParam(':semester', $this->semester);
+        $stmt->bindParam(':expertise', $expertiseJson);
+        $stmt->bindParam(':bio', $bio);
+        $stmt->bindParam(':transkrip_path', $transkripPath);
+        $stmt->bindParam(':gems', $bonusGems);
+
+        if ($stmt->execute()) {
+            $userId = $this->conn->lastInsertId();
+            return [
+                'success' => true, 
+                'message' => 'Registrasi mentor berhasil',
+                'user_id' => $userId,
+                'gems' => $bonusGems
+            ];
+        }
+        return ['success' => false, 'message' => 'Registrasi gagal, coba lagi'];
     }
-
-    $query = "INSERT INTO " . $this->table . " 
-              (name, email, password, program_studi, semester, role, expertise, bio, transkrip_path, is_verified) 
-              VALUES (:name, :email, :password, :program_studi, :semester, 'mentor', :expertise, :bio, :transkrip_path, 0)";
-
-    $stmt = $this->conn->prepare($query);
-
-    $this->name = htmlspecialchars(strip_tags($this->name));
-    $this->email = htmlspecialchars(strip_tags($this->email));
-    $this->program_studi = htmlspecialchars(strip_tags($this->program_studi));
-    $hashedPassword = password_hash($this->password, PASSWORD_DEFAULT);
-    $expertiseJson = json_encode($expertise);
-    $bio = htmlspecialchars(strip_tags($bio));
-
-    $stmt->bindParam(':name', $this->name);
-    $stmt->bindParam(':email', $this->email);
-    $stmt->bindParam(':password', $hashedPassword);
-    $stmt->bindParam(':program_studi', $this->program_studi);
-    $stmt->bindParam(':semester', $this->semester);
-    $stmt->bindParam(':expertise', $expertiseJson);
-    $stmt->bindParam(':bio', $bio);
-    $stmt->bindParam(':transkrip_path', $transkripPath);
-
-    if ($stmt->execute()) {
-        return ['success' => true, 'message' => 'Registrasi mentor berhasil'];
-    }
-    return ['success' => false, 'message' => 'Registrasi gagal, coba lagi'];
-}
-
 }
