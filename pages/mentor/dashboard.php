@@ -25,99 +25,151 @@ $siswaAktif = 12;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Mentor - JagoNugas</title>
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="dashboard-page">
+<body class="mentor-dashboard-page">
     <!-- Navbar Mentor -->
-    <header class="dash-navbar dash-navbar-mentor">
-        <div class="dash-container">
-            <div class="dash-nav-inner">
-                <div class="dash-logo">
-                    <div class="dash-logo-mark mentor">M</div>
-                    <span class="dash-logo-text">JagoNugas <span class="role-badge mentor">Mentor</span></span>
+    <header class="mentor-navbar">
+        <div class="mentor-navbar-inner">
+            <div class="mentor-navbar-left">
+                <a href="<?php echo BASE_PATH; ?>/mentor/dashboard" class="mentor-logo">
+                    <div class="mentor-logo-mark">M</div>
+                    <span class="mentor-logo-text">JagoNugas</span>
+                    <span class="mentor-badge">Mentor</span>
+                </a>
+                <nav class="mentor-nav-links">
+                    <a href="<?php echo BASE_PATH; ?>/mentor/dashboard" class="active">Dashboard</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor/bookings">Booking Saya</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor/chat">Chat</a>
+                </nav>
+            </div>
+            
+            <div class="mentor-navbar-right">
+                <!-- Notification Bell -->
+                <div class="mentor-notif-wrapper">
+                    <button class="mentor-notif-btn">
+                        <i class="bi bi-bell"></i>
+                        <span class="notif-badge">3</span>
+                    </button>
+                    <div class="mentor-notif-dropdown">
+                        <div class="notif-header">
+                            <h4>Notifikasi</h4>
+                            <button class="btn-mark-read" title="Tandai semua dibaca">
+                                <i class="bi bi-check2-all"></i>
+                            </button>
+                        </div>
+                        <div class="notif-list">
+                            <a href="#" class="notif-item unread">
+                                <div class="notif-icon booking">
+                                    <i class="bi bi-calendar-check"></i>
+                                </div>
+                                <div class="notif-content">
+                                    <p><strong>Ahmad Rizky</strong> mengajukan booking baru</p>
+                                    <span class="notif-time">5 menit yang lalu</span>
+                                </div>
+                            </a>
+                            <a href="#" class="notif-item unread">
+                                <div class="notif-icon review">
+                                    <i class="bi bi-star"></i>
+                                </div>
+                                <div class="notif-content">
+                                    <p><strong>Dewi Kartika</strong> memberikan review bintang 5</p>
+                                    <span class="notif-time">1 jam yang lalu</span>
+                                </div>
+                            </a>
+                            <a href="#" class="notif-item">
+                                <div class="notif-icon chat">
+                                    <i class="bi bi-chat-dots"></i>
+                                </div>
+                                <div class="notif-content">
+                                    <p><strong>Budi Santoso</strong> mengirim pesan baru</p>
+                                    <span class="notif-time">2 jam yang lalu</span>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="dash-nav-right">
-                    <nav class="dash-nav-links">
-                        <a href="<?php echo BASE_PATH; ?>/mentor/dashboard" class="active">Dashboard</a>
-                        <a href="<?php echo BASE_PATH; ?>/mentor/bookings">Booking Saya</a>
-                        <a href="<?php echo BASE_PATH; ?>/mentor/chat">Chat</a>
-                    </nav>
-                    
-                    <div class="dash-user-menu">
-                        <div class="dash-avatar mentor"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
-                        <div class="dash-user-info">
-                            <span class="dash-user-name"><?php echo htmlspecialchars($name); ?></span>
-                            <span class="dash-user-role">Mentor</span>
-                        </div>
-                        <div class="dash-dropdown">
-                            <a href="<?php echo BASE_PATH; ?>/mentor/profile">Profil Saya</a>
-                            <a href="<?php echo BASE_PATH; ?>/mentor/settings">Pengaturan</a>
-                            <a href="<?php echo BASE_PATH; ?>/logout" class="logout">Keluar</a>
-                        </div>
+
+                <!-- User Menu -->
+                <div class="mentor-user-menu">
+                    <div class="mentor-avatar"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
+                    <div class="mentor-user-info">
+                        <span class="mentor-user-name"><?php echo htmlspecialchars($name); ?></span>
+                        <span class="mentor-user-role">Mentor</span>
+                    </div>
+                    <i class="bi bi-chevron-down"></i>
+                    <div class="mentor-dropdown">
+                        <a href="<?php echo BASE_PATH; ?>/mentor/profile"><i class="bi bi-person"></i> Profil Saya</a>
+                        <a href="<?php echo BASE_PATH; ?>/mentor/settings"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <div class="dropdown-divider"></div>
+                        <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>
         </div>
     </header>
 
-    <main class="dash-container dash-main">
+    <main class="mentor-main">
         <!-- Welcome Section -->
-        <section class="dash-welcome mentor">
+        <section class="mentor-welcome">
             <div class="welcome-content">
                 <h1>Halo, <?php echo htmlspecialchars($name); ?>! 👋</h1>
                 <p>Siap membantu mahasiswa hari ini?</p>
             </div>
             <div class="welcome-action">
-                <a href="<?php echo BASE_PATH; ?>/mentor/availability" class="btn btn-mentor">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
+                <a href="<?php echo BASE_PATH; ?>/mentor/availability" class="btn btn-mentor-outline">
+                    <i class="bi bi-calendar-check"></i>
                     Atur Jadwal
                 </a>
             </div>
         </section>
 
         <!-- Stats Grid -->
-        <section class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon mentor">📚</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo $totalSesi; ?></span>
-                    <span class="stat-label">Total Sesi</span>
+        <section class="mentor-stats-grid">
+            <div class="mentor-stat-card">
+                <div class="mentor-stat-icon blue">
+                    <i class="bi bi-journal-check"></i>
+                </div>
+                <div class="mentor-stat-info">
+                    <span class="mentor-stat-value"><?php echo $totalSesi; ?></span>
+                    <span class="mentor-stat-label">Total Sesi</span>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon money">💰</div>
-                <div class="stat-info">
-                    <span class="stat-value">Rp <?php echo number_format($totalPendapatan, 0, ',', '.'); ?></span>
-                    <span class="stat-label">Pendapatan</span>
+            <div class="mentor-stat-card">
+                <div class="mentor-stat-icon green">
+                    <i class="bi bi-wallet2"></i>
+                </div>
+                <div class="mentor-stat-info">
+                    <span class="mentor-stat-value">Rp <?php echo number_format($totalPendapatan, 0, ',', '.'); ?></span>
+                    <span class="mentor-stat-label">Pendapatan</span>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon rating">⭐</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo $rating; ?></span>
-                    <span class="stat-label">Rating</span>
+            <div class="mentor-stat-card">
+                <div class="mentor-stat-icon yellow">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <div class="mentor-stat-info">
+                    <span class="mentor-stat-value"><?php echo $rating; ?></span>
+                    <span class="mentor-stat-label">Rating</span>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon students">👥</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo $siswaAktif; ?></span>
-                    <span class="stat-label">Siswa Aktif</span>
+            <div class="mentor-stat-card">
+                <div class="mentor-stat-icon purple">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="mentor-stat-info">
+                    <span class="mentor-stat-value"><?php echo $siswaAktif; ?></span>
+                    <span class="mentor-stat-label">Siswa Aktif</span>
                 </div>
             </div>
         </section>
 
         <!-- Content Grid -->
-        <div class="dash-content-grid">
+        <div class="mentor-content-grid">
             <!-- Booking Terbaru -->
-            <section class="dash-section">
-                <div class="section-header">
-                    <h2>📅 Booking Terbaru</h2>
+            <section class="mentor-section">
+                <div class="mentor-section-header">
+                    <h2><i class="bi bi-calendar3"></i> Booking Terbaru</h2>
                     <a href="<?php echo BASE_PATH; ?>/mentor/bookings" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="booking-list">
@@ -152,22 +204,22 @@ $siswaAktif = 12;
             </section>
 
             <!-- Review Terbaru -->
-            <section class="dash-section">
-                <div class="section-header">
-                    <h2>💬 Review Terbaru</h2>
+            <section class="mentor-section">
+                <div class="mentor-section-header">
+                    <h2><i class="bi bi-chat-quote"></i> Review Terbaru</h2>
                 </div>
                 <div class="review-list">
                     <div class="review-item">
                         <div class="review-header">
                             <span class="review-author">Ahmad Rizky</span>
-                            <span class="review-rating">⭐ 5.0</span>
+                            <span class="review-rating"><i class="bi bi-star-fill"></i> 5.0</span>
                         </div>
                         <p class="review-text">"Penjelasannya sangat jelas dan sabar banget. Recommended!"</p>
                     </div>
                     <div class="review-item">
                         <div class="review-header">
                             <span class="review-author">Dewi Kartika</span>
-                            <span class="review-rating">⭐ 4.5</span>
+                            <span class="review-rating"><i class="bi bi-star-fill"></i> 4.5</span>
                         </div>
                         <p class="review-text">"Membantu banget buat tugas praktikum. Makasih kak!"</p>
                     </div>

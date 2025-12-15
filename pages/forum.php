@@ -34,6 +34,10 @@ if ($filter === 'unanswered') {
     $where[] = "(SELECT COUNT(*) FROM forum_replies WHERE thread_id = ft.id) = 0";
 } elseif ($filter === 'solved') {
     $where[] = "ft.is_solved = 1";
+} elseif ($filter === 'my' && $userId) {
+    // Filter: Pertanyaan Saya
+    $where[] = "ft.user_id = ?";
+    $params[] = $userId;
 }
 
 $whereClause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -165,13 +169,36 @@ if (isset($_GET['deleted'])) {
             <!-- Header -->
             <div class="forum-header">
                 <div class="forum-header-left">
-                    <h1><?php echo $currentCategory ? htmlspecialchars($currentCategory['name']) : 'Forum Diskusi'; ?></h1>
-                    <p><?php echo $currentCategory ? htmlspecialchars($currentCategory['description']) : 'Tanya jawab seputar kuliah dan tugas'; ?></p>
+                    <h1>
+                        <?php 
+                        if ($filter === 'my') {
+                            echo 'Pertanyaan Saya';
+                        } elseif ($currentCategory) {
+                            echo htmlspecialchars($currentCategory['name']);
+                        } else {
+                            echo 'Forum Diskusi';
+                        }
+                        ?>
+                    </h1>
+                    <p>
+                        <?php 
+                        if ($filter === 'my') {
+                            echo 'Daftar pertanyaan yang sudah lo ajukan';
+                        } elseif ($currentCategory) {
+                            echo htmlspecialchars($currentCategory['description']);
+                        } else {
+                            echo 'Tanya jawab seputar kuliah dan tugas';
+                        }
+                        ?>
+                    </p>
                 </div>
                 <div class="forum-header-right">
                     <form class="forum-search" method="GET" action="<?php echo BASE_PATH; ?>/forum">
                         <?php if ($categorySlug): ?>
                         <input type="hidden" name="category" value="<?php echo htmlspecialchars($categorySlug); ?>">
+                        <?php endif; ?>
+                        <?php if ($filter === 'my'): ?>
+                        <input type="hidden" name="filter" value="my">
                         <?php endif; ?>
                         <i class="bi bi-search"></i>
                         <input type="text" name="search" placeholder="Cari pertanyaan..." 
@@ -194,6 +221,12 @@ if (isset($_GET['deleted'])) {
                    class="forum-filter <?php echo $filter === 'solved' ? 'active' : ''; ?>">
                     <i class="bi bi-check-circle"></i> Terjawab
                 </a>
+                <?php if ($userId): ?>
+                <a href="?<?php echo $categorySlug ? "category=$categorySlug&" : ''; ?>filter=my<?php echo $search ? "&search=" . urlencode($search) : ''; ?>" 
+                   class="forum-filter <?php echo $filter === 'my' ? 'active' : ''; ?>">
+                    <i class="bi bi-person"></i> Pertanyaan Saya
+                </a>
+                <?php endif; ?>
             </div>
 
             <!-- Search Result Banner -->
@@ -206,7 +239,7 @@ if (isset($_GET['deleted'])) {
                     <h4>Hasil pencarian untuk "<span><?php echo htmlspecialchars($search); ?></span>"</h4>
                     <p>Ditemukan <strong><?php echo $totalThreads; ?></strong> pertanyaan yang cocok</p>
                 </div>
-                <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?>" class="search-result-clear">
+                <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?><?php echo $filter === 'my' ? ($categorySlug ? '&' : '?') . 'filter=my' : ''; ?>" class="search-result-clear">
                     <i class="bi bi-x-lg"></i>
                     <span>Hapus</span>
                 </a>
@@ -225,7 +258,7 @@ if (isset($_GET['deleted'])) {
                         <h3>Tidak Ada Hasil</h3>
                         <p>Tidak ada pertanyaan yang cocok dengan "<strong><?php echo htmlspecialchars($search); ?></strong>". Coba kata kunci lain atau buat pertanyaan baru.</p>
                         <div class="empty-actions">
-                            <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?>" class="btn btn-outline">
+                            <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?><?php echo $filter === 'my' ? ($categorySlug ? '&' : '?') . 'filter=my' : ''; ?>" class="btn btn-outline">
                                 <i class="bi bi-arrow-left"></i> Lihat Semua
                             </a>
                             <?php if ($userId): ?>
@@ -234,6 +267,16 @@ if (isset($_GET['deleted'])) {
                             </a>
                             <?php endif; ?>
                         </div>
+                    </div>
+                    <?php elseif ($filter === 'my'): ?>
+                    <!-- Empty My Questions -->
+                    <div class="forum-empty">
+                        <i class="bi bi-chat-square-text"></i>
+                        <h3>Belum Ada Pertanyaan</h3>
+                        <p>Lo belum pernah mengajukan pertanyaan. Yuk mulai tanya!</p>
+                        <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-primary">
+                            <i class="bi bi-plus-lg"></i> Buat Pertanyaan
+                        </a>
                     </div>
                     <?php else: ?>
                     <!-- Normal Empty State -->

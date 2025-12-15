@@ -62,11 +62,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Handle delete attachments
     $deleteAttachments = $_POST['delete_attachments'] ?? [];
     
+    // Cek apakah ada perubahan
+    $hasChanges = false;
+    if ($title !== $thread['title'] || 
+        $content !== $thread['content'] || 
+        $categoryId !== (int)$thread['category_id'] ||
+        !empty($deleteAttachments) ||
+        !empty($_FILES['attachments']['name'][0])) {
+        $hasChanges = true;
+    }
+    
     if (empty($errors)) {
+        // Jika tidak ada perubahan, redirect tanpa update
+        if (!$hasChanges) {
+            header("Location: " . BASE_PATH . "/forum/thread/$threadId");
+            exit;
+        }
+        
         try {
             $pdo->beginTransaction();
             
-            // Update thread
+            // Update thread - hanya update updated_at jika ada perubahan
             $stmt = $pdo->prepare("UPDATE forum_threads SET title = ?, content = ?, category_id = ?, updated_at = NOW() WHERE id = ?");
             $stmt->execute([$title, $content, $categoryId, $threadId]);
             

@@ -11,20 +11,12 @@ $request = str_replace($basePath, '', $request);
 $request = strtok($request, '?');
 $request = trim($request, '/');
 
-// Kalau kosong, berarti home
-if ($request === '') {
-    $request = 'home';
-}
-
 // Route params untuk dynamic routes
 $routeParams = [];
 
 switch (true) {
     // ===== PUBLIC ROUTES =====
-    case $request === 'home':
-    case $request === '':
-        require 'pages/index.php';
-        break;
+    // Root/home sekarang ditangani oleh index.php di root folder
     
     case $request === 'login':
         require 'pages/login.php';
@@ -55,6 +47,10 @@ switch (true) {
         require 'pages/diskusi.php';
         break;
 
+    case $request === 'settings':
+        require 'pages/settings.php';
+        break;
+
     // ===== FORUM ROUTES =====
     case $request === 'forum':
         require 'pages/forum.php';
@@ -62,6 +58,12 @@ switch (true) {
     
     case $request === 'forum/create':
         require 'pages/forum-create.php';
+        break;
+    
+    // Dynamic route: /forum/edit/123
+    case preg_match('#^forum/edit/(\d+)$#', $request, $matches):
+        $routeParams['id'] = $matches[1];
+        require 'pages/forum-edit.php';
         break;
     
     // Dynamic route: /forum/thread/123
@@ -100,32 +102,6 @@ switch (true) {
     case $request === 'api/forum/upvote':
         require 'api/forum-upvote.php';
         break;
-
-    // ===== FORUM ROUTES =====
-case $request === 'forum':
-    require 'pages/forum.php';
-    break;
-
-case $request === 'forum/create':
-    require 'pages/forum-create.php';
-    break;
-
-// Dynamic route: /forum/edit/123 - TAMBAH INI
-case preg_match('#^forum/edit/(\d+)$#', $request, $matches):
-    $routeParams['id'] = $matches[1];
-    require 'pages/forum-edit.php';
-    break;
-
-// Dynamic route: /forum/thread/123
-case preg_match('#^forum/thread/(\d+)$#', $request, $matches):
-    $routeParams['id'] = $matches[1];
-    require 'pages/forum-thread.php';
-    break;
-
-    case 'settings':
-    require __DIR__ . '/pages/settings.php';
-    break;
-
 
     // ===== 404 =====
     default:

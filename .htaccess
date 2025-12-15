@@ -1,13 +1,17 @@
 Options -Indexes
-DirectoryIndex app.php
 
 RewriteEngine On
 
+# Jika file/folder ada, langsung akses
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-RewriteRule ^ app.php [QSA,L]
+# Jika request ke root (/), pakai index.php
+RewriteRule ^$ index.php [L]
+
+# Selain itu, arahkan ke app.php
+RewriteRule ^(.+)$ app.php [QSA,L]
 
 # ===== DEV ONLY: matikan cache biar CSS/JS/IMG selalu fresh =====
 <IfModule mod_headers.c>

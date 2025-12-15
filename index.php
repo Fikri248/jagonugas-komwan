@@ -1,7 +1,5 @@
 <?php
-if (!defined('BASE_PATH')) {
-  require_once __DIR__ . '/../config.php';
-}
+require_once __DIR__ . '/config.php';
 ?>
 
 <!DOCTYPE html>
@@ -47,13 +45,12 @@ if (!defined('BASE_PATH')) {
                     Konsultasi langsung dengan mentor berpengalaman, harga terjangkau, hasil terbukti.
                 </p>
                 <div class="hero-cta">
-                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-large">
-                        <span>Mulai Gratis</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
-                        </svg>
-                    </a>
-                </div>
+    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-hero-cta">
+        <span>Mulai Gratis</span>
+        <i class="bi bi-arrow-right"></i>
+    </a>
+</div>
+
             </div>
 
             <!-- Kanan: logo besar -->

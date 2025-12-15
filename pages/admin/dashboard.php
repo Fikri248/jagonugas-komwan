@@ -24,104 +24,111 @@ $pendapatanBulan = 12500000;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - JagoNugas</title>
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="dashboard-page">
+<body class="admin-dashboard-page">
     <!-- Navbar Admin -->
-    <header class="dash-navbar dash-navbar-admin">
-        <div class="dash-container">
-            <div class="dash-nav-inner">
-                <div class="dash-logo">
-                    <div class="dash-logo-mark admin">A</div>
-                    <span class="dash-logo-text">JagoNugas <span class="role-badge admin">Admin</span></span>
-                </div>
-                
-                <div class="dash-nav-right">
-                    <nav class="dash-nav-links">
-                        <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="active">Dashboard</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/users">Users</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/mentors">Mentors</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/transactions">Transaksi</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/settings">Settings</a>
-                    </nav>
-                    
-                    <div class="dash-user-menu">
-                        <div class="dash-avatar admin"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
-                        <div class="dash-user-info">
-                            <span class="dash-user-name"><?php echo htmlspecialchars($name); ?></span>
-                            <span class="dash-user-role">Administrator</span>
-                        </div>
-                        <div class="dash-dropdown">
-                            <a href="<?php echo BASE_PATH; ?>/admin/profile">Profil</a>
-                            <a href="<?php echo BASE_PATH; ?>/logout" class="logout">Keluar</a>
-                        </div>
+    <header class="admin-navbar">
+        <div class="admin-navbar-inner">
+            <div class="admin-navbar-left">
+                <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="admin-logo">
+                    <div class="admin-logo-mark">A</div>
+                    <span class="admin-logo-text">JagoNugas</span>
+                    <span class="admin-badge">Admin</span>
+                </a>
+                <nav class="admin-nav-links">
+                    <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="active">Dashboard</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/users">Users</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/mentors">Mentors</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/transactions">Transaksi</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/settings">Settings</a>
+                </nav>
+            </div>
+            
+            <div class="admin-navbar-right">
+                <div class="admin-user-menu">
+                    <div class="admin-avatar"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
+                    <div class="admin-user-info">
+                        <span class="admin-user-name"><?php echo htmlspecialchars($name); ?></span>
+                        <span class="admin-user-role">Administrator</span>
+                    </div>
+                    <i class="bi bi-chevron-down"></i>
+                    <div class="admin-dropdown">
+                        <a href="<?php echo BASE_PATH; ?>/admin/profile"><i class="bi bi-person"></i> Profil</a>
+                        <a href="<?php echo BASE_PATH; ?>/admin/settings"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <div class="dropdown-divider"></div>
+                        <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>
         </div>
     </header>
 
-    <main class="dash-container dash-main">
+    <main class="admin-main">
         <!-- Welcome Section -->
-        <section class="dash-welcome admin">
+        <section class="admin-welcome">
             <div class="welcome-content">
-                <h1>Admin Dashboard 🛡️</h1>
+                <h1>Admin Dashboard <i class="bi bi-shield-check"></i></h1>
                 <p>Kelola seluruh sistem JagoNugas dari sini</p>
             </div>
             <div class="welcome-action">
-                <a href="<?php echo BASE_PATH; ?>/admin/reports" class="btn btn-admin">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
+                <a href="<?php echo BASE_PATH; ?>/admin/reports" class="btn btn-admin-outline">
+                    <i class="bi bi-file-earmark-text"></i>
                     Lihat Laporan
                 </a>
             </div>
         </section>
 
         <!-- Stats Grid -->
-        <section class="stats-grid stats-grid-4">
-            <div class="stat-card">
-                <div class="stat-icon users">👥</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo number_format($totalUsers); ?></span>
-                    <span class="stat-label">Total Users</span>
+        <section class="admin-stats-grid">
+            <div class="admin-stat-card">
+                <div class="admin-stat-icon blue">
+                    <i class="bi bi-people-fill"></i>
                 </div>
-                <span class="stat-trend up">+12% ↑</span>
+                <div class="admin-stat-info">
+                    <span class="admin-stat-value"><?php echo number_format($totalUsers); ?></span>
+                    <span class="admin-stat-label">Total Users</span>
+                </div>
+                <span class="admin-stat-trend up"><i class="bi bi-arrow-up"></i> 12%</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon mentors">🎓</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo $totalMentors; ?></span>
-                    <span class="stat-label">Total Mentors</span>
+            <div class="admin-stat-card">
+                <div class="admin-stat-icon purple">
+                    <i class="bi bi-mortarboard-fill"></i>
                 </div>
-                <span class="stat-trend up">+5 baru ↑</span>
+                <div class="admin-stat-info">
+                    <span class="admin-stat-value"><?php echo $totalMentors; ?></span>
+                    <span class="admin-stat-label">Total Mentors</span>
+                </div>
+                <span class="admin-stat-trend up"><i class="bi bi-arrow-up"></i> 5 baru</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon transactions">💳</div>
-                <div class="stat-info">
-                    <span class="stat-value"><?php echo number_format($totalTransaksi); ?></span>
-                    <span class="stat-label">Transaksi</span>
+            <div class="admin-stat-card">
+                <div class="admin-stat-icon green">
+                    <i class="bi bi-credit-card-fill"></i>
                 </div>
-                <span class="stat-trend up">+8% ↑</span>
+                <div class="admin-stat-info">
+                    <span class="admin-stat-value"><?php echo number_format($totalTransaksi); ?></span>
+                    <span class="admin-stat-label">Transaksi</span>
+                </div>
+                <span class="admin-stat-trend up"><i class="bi bi-arrow-up"></i> 8%</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon revenue">💰</div>
-                <div class="stat-info">
-                    <span class="stat-value">Rp <?php echo number_format($pendapatanBulan / 1000000, 1); ?>jt</span>
-                    <span class="stat-label">Pendapatan Bulan Ini</span>
+            <div class="admin-stat-card">
+                <div class="admin-stat-icon yellow">
+                    <i class="bi bi-cash-stack"></i>
                 </div>
-                <span class="stat-trend up">+15% ↑</span>
+                <div class="admin-stat-info">
+                    <span class="admin-stat-value">Rp <?php echo number_format($pendapatanBulan / 1000000, 1); ?>jt</span>
+                    <span class="admin-stat-label">Pendapatan Bulan Ini</span>
+                </div>
+                <span class="admin-stat-trend up"><i class="bi bi-arrow-up"></i> 15%</span>
             </div>
         </section>
 
         <!-- Content Grid -->
-        <div class="dash-content-grid">
+        <div class="admin-content-grid">
             <!-- User Terbaru -->
-            <section class="dash-section">
-                <div class="section-header">
-                    <h2>👤 User Terbaru</h2>
+            <section class="admin-section">
+                <div class="admin-section-header">
+                    <h2><i class="bi bi-person-fill"></i> User Terbaru</h2>
                     <a href="<?php echo BASE_PATH; ?>/admin/users" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="admin-table-wrapper">
@@ -159,9 +166,9 @@ $pendapatanBulan = 12500000;
             </section>
 
             <!-- Transaksi Terbaru -->
-            <section class="dash-section">
-                <div class="section-header">
-                    <h2>💳 Transaksi Terbaru</h2>
+            <section class="admin-section">
+                <div class="admin-section-header">
+                    <h2><i class="bi bi-credit-card"></i> Transaksi Terbaru</h2>
                     <a href="<?php echo BASE_PATH; ?>/admin/transactions" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="admin-table-wrapper">
@@ -197,38 +204,40 @@ $pendapatanBulan = 12500000;
                     </table>
                 </div>
             </section>
-        </div>
 
-        <!-- Quick Actions -->
-        <section class="quick-actions">
-            <h2>⚡ Aksi Cepat</h2>
-            <div class="action-grid">
-                <a href="<?php echo BASE_PATH; ?>/admin/users" class="action-card">
-                    <span class="action-icon">👥</span>
-                    <span class="action-label">Kelola Users</span>
-                </a>
-                <a href="<?php echo BASE_PATH; ?>/admin/mentors" class="action-card">
-                    <span class="action-icon">🎓</span>
-                    <span class="action-label">Kelola Mentors</span>
-                </a>
-                <a href="<?php echo BASE_PATH; ?>/admin/transactions" class="action-card">
-                    <span class="action-icon">💳</span>
-                    <span class="action-label">Kelola Transaksi</span>
-                </a>
-                <a href="<?php echo BASE_PATH; ?>/admin/forum" class="action-card">
-                    <span class="action-icon">💬</span>
-                    <span class="action-label">Moderasi Forum</span>
-                </a>
-                <a href="<?php echo BASE_PATH; ?>/admin/packages" class="action-card">
-                    <span class="action-icon">📦</span>
-                    <span class="action-label">Atur Paket Gem</span>
-                </a>
-                <a href="<?php echo BASE_PATH; ?>/admin/settings" class="action-card">
-                    <span class="action-icon">⚙️</span>
-                    <span class="action-label">Pengaturan</span>
-                </a>
-            </div>
-        </section>
+            <!-- Quick Actions -->
+            <section class="admin-section admin-quick-actions">
+                <div class="admin-section-header">
+                    <h2><i class="bi bi-lightning-fill"></i> Aksi Cepat</h2>
+                </div>
+                <div class="admin-action-grid">
+                    <a href="<?php echo BASE_PATH; ?>/admin/users" class="admin-action-card">
+                        <div class="action-icon blue"><i class="bi bi-people-fill"></i></div>
+                        <span>Kelola Users</span>
+                    </a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/mentors" class="admin-action-card">
+                        <div class="action-icon purple"><i class="bi bi-mortarboard-fill"></i></div>
+                        <span>Kelola Mentors</span>
+                    </a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/transactions" class="admin-action-card">
+                        <div class="action-icon green"><i class="bi bi-credit-card-fill"></i></div>
+                        <span>Transaksi</span>
+                    </a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/forum" class="admin-action-card">
+                        <div class="action-icon cyan"><i class="bi bi-chat-square-text-fill"></i></div>
+                        <span>Forum</span>
+                    </a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/packages" class="admin-action-card">
+                        <div class="action-icon yellow"><i class="bi bi-box-fill"></i></div>
+                        <span>Paket Gem</span>
+                    </a>
+                    <a href="<?php echo BASE_PATH; ?>/admin/settings" class="admin-action-card">
+                        <div class="action-icon gray"><i class="bi bi-gear-fill"></i></div>
+                        <span>Settings</span>
+                    </a>
+                </div>
+            </section>
+        </div>
     </main>
 </body>
 </html>

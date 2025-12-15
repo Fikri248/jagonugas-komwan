@@ -37,7 +37,7 @@ if (isset($_POST['delete_thread']) && $userId == $thread['author_id']) {
         $stmt->execute([$threadId, $userId]);
         $repliers = $stmt->fetchAll(PDO::FETCH_COLUMN);
         
-        // Delete attachments files
+        // Delete thread attachments files
         $stmt = $pdo->prepare("SELECT file_path FROM forum_attachments WHERE thread_id = ?");
         $stmt->execute([$threadId]);
         $files = $stmt->fetchAll();
@@ -47,6 +47,28 @@ if (isset($_POST['delete_thread']) && $userId == $thread['author_id']) {
                 unlink($filePath);
             }
         }
+        
+        // Delete reply attachments files
+        $stmt = $pdo->prepare("
+            SELECT ra.file_path FROM reply_attachments ra 
+            JOIN forum_replies fr ON ra.reply_id = fr.id 
+            WHERE fr.thread_id = ?
+        ");
+        $stmt->execute([$threadId]);
+        $replyFiles = $stmt->fetchAll();
+        foreach ($replyFiles as $file) {
+            $filePath = __DIR__ . '/../' . $file['file_path'];
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+        }
+        
+        // Delete reply attachments records
+        $pdo->prepare("
+            DELETE ra FROM reply_attachments ra 
+            JOIN forum_replies fr ON ra.reply_id = fr.id 
+            WHERE fr.thread_id = ?
+        ")->execute([$threadId]);
         
         // Delete related data
         $pdo->prepare("DELETE FROM forum_attachments WHERE thread_id = ?")->execute([$threadId]);
@@ -132,6 +154,14 @@ $stmt = $pdo->prepare("
 $stmt->execute($userId ? [$userId, $threadId] : [$threadId]);
 $replies = $stmt->fetchAll();
 
+// Get attachments for each reply
+foreach ($replies as &$reply) {
+    $stmt = $pdo->prepare("SELECT * FROM reply_attachments WHERE reply_id = ?");
+    $stmt->execute([$reply['id']]);
+    $reply['attachments'] = $stmt->fetchAll();
+}
+unset($reply);
+
 // Handle new reply
 $replyError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
@@ -148,8 +178,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
         $replyError = "Jawaban minimal 10 karakter";
     } else {
         try {
+            $pdo->beginTransaction();
+            
+            // Insert reply
             $stmt = $pdo->prepare("INSERT INTO forum_replies (thread_id, user_id, content) VALUES (?, ?, ?)");
             $stmt->execute([$threadId, $userId, $replyContent]);
+            $replyId = $pdo->lastInsertId();
+            
+            // Handle file uploads
+            if (!empty($_FILES['attachments']['name'][0])) {
+                $uploadDir = __DIR__ . '/../uploads/replies/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
+                }
+                
+                foreach ($_FILES['attachments']['tmp_name'] as $key => $tmpName) {
+                    if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
+                        $fileName = $_FILES['attachments']['name'][$key];
+                        $fileSize = $_FILES['attachments']['size'][$key];
+                        $fileType = $_FILES['attachments']['type'][$key];
+                        
+                        // Max 5MB
+                        if ($fileSize > 5 * 1024 * 1024) continue;
+                        
+                        $ext = pathinfo($fileName, PATHINFO_EXTENSION);
+                        $newName = uniqid() . '_' . time() . '.' . $ext;
+                        $filePath = 'uploads/replies/' . $newName;
+                        
+                        if (move_uploaded_file($tmpName, $uploadDir . $newName)) {
+                            $stmt = $pdo->prepare("INSERT INTO reply_attachments (reply_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)");
+                            $stmt->execute([$replyId, $fileName, $filePath, $fileType, $fileSize]);
+                        }
+                    }
+                }
+            }
             
             // Kirim notifikasi ke pemilik thread (jika bukan diri sendiri)
             if ($thread['author_id'] != $userId) {
@@ -162,9 +224,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
                 );
             }
             
-            header("Location: " . BASE_PATH . "/forum/thread/$threadId?success=1#replies");
+            $pdo->commit();
+            header("Location: " . BASE_PATH . "/forum/thread/$threadId?success=1#reply-$replyId");
             exit;
+            
         } catch (Exception $e) {
+            $pdo->rollBack();
             $replyError = "Gagal mengirim jawaban. Silakan coba lagi.";
         }
     }
@@ -405,6 +470,25 @@ function time_elapsed($datetime) {
                         <div class="reply-content">
                             <?php echo nl2br(htmlspecialchars($reply['content'])); ?>
                         </div>
+                        
+                        <!-- Reply Attachments -->
+                        <?php if (!empty($reply['attachments'])): ?>
+                        <div class="reply-attachments">
+                            <?php foreach ($reply['attachments'] as $att): ?>
+                                <?php if (strpos($att['file_type'], 'image') !== false): ?>
+                                <a href="<?php echo BASE_PATH . '/' . $att['file_path']; ?>" target="_blank" class="reply-attachment image">
+                                    <img src="<?php echo BASE_PATH . '/' . $att['file_path']; ?>" alt="<?php echo htmlspecialchars($att['file_name']); ?>">
+                                </a>
+                                <?php else: ?>
+                                <a href="<?php echo BASE_PATH . '/' . $att['file_path']; ?>" target="_blank" class="reply-attachment file">
+                                    <i class="bi bi-file-earmark"></i>
+                                    <span><?php echo htmlspecialchars($att['file_name']); ?></span>
+                                    <small><?php echo round($att['file_size'] / 1024, 1); ?> KB</small>
+                                </a>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="reply-footer">
@@ -446,12 +530,25 @@ function time_elapsed($datetime) {
             </div>
             <?php endif; ?>
             
-            <form method="POST" action="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $threadId; ?>#reply-form">
+            <form method="POST" enctype="multipart/form-data" action="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $threadId; ?>#reply-form">
                 <div class="form-group">
                     <textarea name="reply_content" rows="5" 
                               placeholder="Tulis jawabanmu di sini. Jelaskan dengan detail dan jelas..."
                               required><?php echo htmlspecialchars($_POST['reply_content'] ?? ''); ?></textarea>
                 </div>
+                
+                <!-- File Upload Area -->
+                <div class="reply-upload-section">
+                    <div class="reply-upload-area" id="replyDropZone">
+                        <i class="bi bi-paperclip"></i>
+                        <span>Lampirkan file (opsional)</span>
+                        <small>Gambar, PDF, DOC - Maks 5MB</small>
+                        <input type="file" id="replyAttachments" name="attachments[]" multiple 
+                               accept="image/*,.pdf,.doc,.docx,.txt">
+                    </div>
+                    <div id="replyFileList" class="reply-file-list"></div>
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-send"></i> Kirim Jawaban
@@ -603,6 +700,52 @@ function time_elapsed($datetime) {
             }
         });
     });
+
+    // Reply file upload
+    const replyDropZone = document.getElementById('replyDropZone');
+    const replyFileInput = document.getElementById('replyAttachments');
+    const replyFileList = document.getElementById('replyFileList');
+
+    if (replyDropZone && replyFileInput) {
+        replyDropZone.addEventListener('click', () => replyFileInput.click());
+        
+        replyDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            replyDropZone.classList.add('dragover');
+        });
+        
+        replyDropZone.addEventListener('dragleave', () => {
+            replyDropZone.classList.remove('dragover');
+        });
+        
+        replyDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            replyDropZone.classList.remove('dragover');
+            replyFileInput.files = e.dataTransfer.files;
+            updateReplyFileList();
+        });
+        
+        replyFileInput.addEventListener('change', updateReplyFileList);
+        
+        function updateReplyFileList() {
+            replyFileList.innerHTML = '';
+            Array.from(replyFileInput.files).forEach((file) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                
+                let icon = 'bi-file-earmark';
+                if (file.type.startsWith('image/')) icon = 'bi-file-image';
+                else if (file.type === 'application/pdf') icon = 'bi-file-pdf';
+                
+                item.innerHTML = `
+                    <i class="bi ${icon}"></i>
+                    <span>${file.name}</span>
+                    <small>(${(file.size / 1024).toFixed(1)} KB)</small>
+                `;
+                replyFileList.appendChild(item);
+            });
+        }
+    }
 
     // Auto-hide success alert
     const successAlert = document.querySelector('.alert-success');
