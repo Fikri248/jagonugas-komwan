@@ -1,7 +1,6 @@
 <?php
 // pages/admin/dashboard.php
 require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../db.php';
 
 // Cek login & role
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {

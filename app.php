@@ -16,7 +16,10 @@ $routeParams = [];
 
 switch (true) {
     // ===== PUBLIC ROUTES =====
-    // Root/home sekarang ditangani oleh index.php di root folder
+    case $request === '':
+    case $request === 'home':
+        require 'pages/home.php';
+        break;
     
     case $request === 'login':
         require 'pages/login.php';
@@ -60,14 +63,12 @@ switch (true) {
         require 'pages/forum-create.php';
         break;
     
-    // Dynamic route: /forum/edit/123
-    case preg_match('#^forum/edit/(\d+)$#', $request, $matches):
+    case preg_match('#^forum/edit/(\d+)$#', $request, $matches) === 1:
         $routeParams['id'] = $matches[1];
         require 'pages/forum-edit.php';
         break;
     
-    // Dynamic route: /forum/thread/123
-    case preg_match('#^forum/thread/(\d+)$#', $request, $matches):
+    case preg_match('#^forum/thread/(\d+)$#', $request, $matches) === 1:
         $routeParams['id'] = $matches[1];
         require 'pages/forum-thread.php';
         break;
@@ -88,14 +89,50 @@ switch (true) {
     case $request === 'mentor/dashboard':
         require 'pages/mentor/dashboard.php';
         break;
+    
+    case $request === 'mentor/bookings':
+        require 'pages/mentor/bookings.php';
+        break;
+    
+    case $request === 'mentor/chat':
+        require 'pages/mentor/chat.php';
+        break;
+    
+    case $request === 'mentor/profile':
+        require 'pages/mentor/profile.php';
+        break;
+    
+    case $request === 'mentor/settings':
+        require 'pages/mentor/settings.php';
+        break;
+    
+    case $request === 'mentor/availability':
+        require 'pages/mentor/availability.php';
+        break;
 
     // ===== ADMIN ROUTES =====
     case $request === 'admin/dashboard':
         require 'pages/admin/dashboard.php';
         break;
 
+    case $request === 'admin/users':
+        require 'pages/admin/users.php';
+        break;
+
     case $request === 'admin/mentors':
         require 'pages/admin/mentors.php';
+        break;
+    
+    case $request === 'admin/transactions':
+        require 'pages/admin/transactions.php';
+        break;
+    
+    case $request === 'admin/settings':
+        require 'pages/admin/settings.php';
+        break;
+    
+    case $request === 'admin/reports':
+        require 'pages/admin/reports.php';
         break;
 
     // ===== API ROUTES =====
@@ -106,6 +143,6 @@ switch (true) {
     // ===== 404 =====
     default:
         http_response_code(404);
-        echo "404 Not Found (route: /$request)";
+        require 'pages/404.php'; // Buat halaman 404 yang proper
         break;
 }

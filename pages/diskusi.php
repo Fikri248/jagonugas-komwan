@@ -1,6 +1,5 @@
 <?php
-require_once 'config.php';
-require 'db.php';
+require_once __DIR__ . '/../config.php';
 require 'ModelDiskusi.php';
 
 if (!isset($_SESSION['user_id'])) {
