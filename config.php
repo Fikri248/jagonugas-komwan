@@ -1,10 +1,12 @@
 <?php
 // config.php - All-in-One Configuration
 
+
 // ============================================
 // TIMEZONE
 // ============================================
 date_default_timezone_set('Asia/Jakarta');
+
 
 // ============================================
 // SESSION
@@ -13,18 +15,26 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+
 // ============================================
 // BASE PATH & URL
 // ============================================
-$basePath = getenv('BASE_PATH');
-if ($basePath === false || $basePath === '') {
-    $basePath = '/jagonugas-native'; // Default untuk local
+$hostName = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+// Auto-detect: Azure = kosong, Local = /jagonugas-native
+if (strpos($hostName, 'azurewebsites.net') !== false) {
+    define('BASE_PATH', '');
+} else {
+    $basePath = getenv('BASE_PATH');
+    if ($basePath === false || $basePath === '') {
+        $basePath = '/jagonugas-native'; // Default untuk local
+    }
+    define('BASE_PATH', $basePath);
 }
-define('BASE_PATH', $basePath);
 
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-define('BASE_URL', $protocol . '://' . $host);
+define('BASE_URL', $protocol . '://' . $hostName);
+
 
 // ============================================
 // DATABASE CONNECTION
@@ -34,6 +44,7 @@ $db_name = getenv('DB_NAME') ?: 'jagonugas_db';
 $db_user = getenv('DB_USER') ?: 'root';
 $db_pass = getenv('DB_PASS') ?: 'root';
 $db_port = getenv('DB_PORT') ?: '3306';
+
 
 try {
     $pdo = new PDO(
