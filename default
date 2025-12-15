@@ -1,0 +1,26 @@
+server {
+    listen 8080;
+    listen [::]:8080;
+    root /home/site/wwwroot;
+    index index.php index.html;
+    server_name _;
+    
+    # Serve static files directly
+    location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        access_log off;
+        try_files $uri =404;
+    }
+    
+    # Route all requests to index.php (for PHP routing)
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+    
+    # Handle PHP files
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
