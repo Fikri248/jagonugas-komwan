@@ -1,5 +1,5 @@
 <?php
-// models/ModelUser.php
+// ModelUser.php
 
 class User {
     private $conn;

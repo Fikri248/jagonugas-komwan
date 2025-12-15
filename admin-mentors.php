@@ -1,10 +1,9 @@
 <?php
-// pages/admin/mentors.php
-require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/config.php';
 
 // Cek login & role admin
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
@@ -33,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mentor = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($mentor && $mentor['transkrip_path']) {
-                $filePath = __DIR__ . '/../../' . $mentor['transkrip_path'];
+                $filePath = __DIR__ . '/' . $mentor['transkrip_path'];
                 if (file_exists($filePath)) {
                     unlink($filePath);
                 }
@@ -76,7 +75,7 @@ $verifiedCount = $stmtVerified->fetchColumn();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kelola Mentor - Admin JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="admin-dashboard-page">
@@ -84,17 +83,17 @@ $verifiedCount = $stmtVerified->fetchColumn();
     <header class="admin-navbar">
         <div class="admin-navbar-inner">
             <div class="admin-navbar-left">
-                <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="admin-logo">
+                <a href="<?php echo BASE_PATH; ?>/admin-dashboard.php" class="admin-logo">
                     <div class="admin-logo-mark">A</div>
                     <span class="admin-logo-text">JagoNugas</span>
                     <span class="admin-badge">Admin</span>
                 </a>
                 <nav class="admin-nav-links">
-                    <a href="<?php echo BASE_PATH; ?>/admin/dashboard">Dashboard</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/users">Users</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/mentors" class="active">Mentors</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/transactions">Transaksi</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/settings">Settings</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-dashboard.php">Dashboard</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-users.php">Users</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-mentors.php" class="active">Mentors</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-transactions.php">Transaksi</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-settings.php">Settings</a>
                 </nav>
             </div>
             
@@ -107,10 +106,10 @@ $verifiedCount = $stmtVerified->fetchColumn();
                     </div>
                     <i class="bi bi-chevron-down"></i>
                     <div class="admin-dropdown">
-                        <a href="<?php echo BASE_PATH; ?>/admin/profile"><i class="bi bi-person"></i> Profil</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/settings"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <a href="<?php echo BASE_PATH; ?>/admin-profile.php"><i class="bi bi-person"></i> Profil</a>
+                        <a href="<?php echo BASE_PATH; ?>/admin-settings.php"><i class="bi bi-gear"></i> Pengaturan</a>
                         <div class="dropdown-divider"></div>
-                        <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                        <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>

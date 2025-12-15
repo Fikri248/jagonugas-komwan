@@ -56,19 +56,11 @@ try {
 // HELPER FUNCTIONS
 // ============================================
 
-/**
- * Get database connection
- * Untuk backward compatibility dengan kode yang pakai Database class
- */
 function getDB() {
     global $pdo;
     return $pdo;
 }
 
-/**
- * Database class wrapper (backward compatibility)
- * Biar kode lama yang pakai "new Database()" tetap jalan
- */
 class Database {
     public function getConnection() {
         global $pdo;
@@ -76,45 +68,27 @@ class Database {
     }
 }
 
-/**
- * Redirect helper
- */
 function redirect($path) {
     header("Location: " . BASE_PATH . $path);
     exit;
 }
 
-/**
- * Check if user is logged in
- */
 function isLoggedIn() {
     return isset($_SESSION['user_id']);
 }
 
-/**
- * Check user role
- */
 function hasRole($role) {
     return isset($_SESSION['role']) && $_SESSION['role'] === $role;
 }
 
-/**
- * Sanitize output
- */
 function e($string) {
     return htmlspecialchars($string ?? '', ENT_QUOTES, 'UTF-8');
 }
 
-/**
- * Format rupiah
- */
 function rupiah($amount) {
     return 'Rp ' . number_format($amount, 0, ',', '.');
 }
 
-/**
- * Format tanggal Indonesia
- */
 function tanggal($date, $format = 'd M Y') {
     return date($format, strtotime($date));
 }

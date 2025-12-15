@@ -1,14 +1,13 @@
 <?php
-// pages/reset-password.php
-require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../ModelUser.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ModelUser.php';
 
 $error = '';
 $success = '';
 $token = $_GET['token'] ?? '';
 
 if (empty($token)) {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
@@ -42,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reset Password - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
 </head>
 <body class="auth-page">
     <div class="auth-card">
@@ -70,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <div class="auth-footer-actions">
-                <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-primary btn-full">
+                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-primary btn-full">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                         <polyline points="10 17 15 12 10 7"/>
@@ -96,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Tombol Group: Ubah + Batal -->
                 <div class="auth-btn-group">
                     <button type="submit" class="btn btn-primary">Ubah Password</button>
-                    <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-cancel">Batal</a>
+                    <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-cancel">Batal</a>
                 </div>
             </form>
         <?php endif; ?>

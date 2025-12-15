@@ -1,10 +1,9 @@
 <?php
-// pages/mentor/dashboard.php
-require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/config.php';
 
 // Cek login & role
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'mentor') {
-    header("Location: " . BASE_PATH . "/mentor/login");
+    header("Location: " . BASE_PATH . "/mentor-login.php");
     exit;
 }
 
@@ -23,7 +22,7 @@ $siswaAktif = 12;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Mentor - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="mentor-dashboard-page">
@@ -31,15 +30,15 @@ $siswaAktif = 12;
     <header class="mentor-navbar">
         <div class="mentor-navbar-inner">
             <div class="mentor-navbar-left">
-                <a href="<?php echo BASE_PATH; ?>/mentor/dashboard" class="mentor-logo">
+                <a href="<?php echo BASE_PATH; ?>/mentor-dashboard.php" class="mentor-logo">
                     <div class="mentor-logo-mark">M</div>
                     <span class="mentor-logo-text">JagoNugas</span>
                     <span class="mentor-badge">Mentor</span>
                 </a>
                 <nav class="mentor-nav-links">
-                    <a href="<?php echo BASE_PATH; ?>/mentor/dashboard" class="active">Dashboard</a>
-                    <a href="<?php echo BASE_PATH; ?>/mentor/bookings">Booking Saya</a>
-                    <a href="<?php echo BASE_PATH; ?>/mentor/chat">Chat</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor-dashboard.php" class="active">Dashboard</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor-bookings.php">Booking Saya</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor-chat.php">Chat</a>
                 </nav>
             </div>
             
@@ -98,10 +97,10 @@ $siswaAktif = 12;
                     </div>
                     <i class="bi bi-chevron-down"></i>
                     <div class="mentor-dropdown">
-                        <a href="<?php echo BASE_PATH; ?>/mentor/profile"><i class="bi bi-person"></i> Profil Saya</a>
-                        <a href="<?php echo BASE_PATH; ?>/mentor/settings"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <a href="<?php echo BASE_PATH; ?>/mentor-profile.php"><i class="bi bi-person"></i> Profil Saya</a>
+                        <a href="<?php echo BASE_PATH; ?>/mentor-settings.php"><i class="bi bi-gear"></i> Pengaturan</a>
                         <div class="dropdown-divider"></div>
-                        <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                        <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>
@@ -116,7 +115,7 @@ $siswaAktif = 12;
                 <p>Siap membantu mahasiswa hari ini?</p>
             </div>
             <div class="welcome-action">
-                <a href="<?php echo BASE_PATH; ?>/mentor/availability" class="btn btn-mentor-outline">
+                <a href="<?php echo BASE_PATH; ?>/mentor-availability.php" class="btn btn-mentor-outline">
                     <i class="bi bi-calendar-check"></i>
                     Atur Jadwal
                 </a>
@@ -169,7 +168,7 @@ $siswaAktif = 12;
             <section class="mentor-section">
                 <div class="mentor-section-header">
                     <h2><i class="bi bi-calendar3"></i> Booking Terbaru</h2>
-                    <a href="<?php echo BASE_PATH; ?>/mentor/bookings" class="section-link">Lihat Semua</a>
+                    <a href="<?php echo BASE_PATH; ?>/mentor-bookings.php" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="booking-list">
                     <div class="booking-item pending">

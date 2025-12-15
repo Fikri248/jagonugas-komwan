@@ -1,6 +1,5 @@
 <?php
-// pages/logout.php
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 
 // Hapus semua session data
 $_SESSION = array();
@@ -18,5 +17,5 @@ if (ini_get("session.use_cookies")) {
 session_destroy();
 
 // Redirect ke landing page
-header("Location: " . BASE_PATH . "/");
+header("Location: " . BASE_PATH . "/index.php");
 exit;

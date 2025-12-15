@@ -1,10 +1,9 @@
 <?php
-// pages/admin/dashboard.php
-require_once __DIR__ . '/../../config.php';
+require_once __DIR__ . '/config.php';
 
 // Cek login & role
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
@@ -22,7 +21,7 @@ $pendapatanBulan = 12500000;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="admin-dashboard-page">
@@ -30,17 +29,17 @@ $pendapatanBulan = 12500000;
     <header class="admin-navbar">
         <div class="admin-navbar-inner">
             <div class="admin-navbar-left">
-                <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="admin-logo">
+                <a href="<?php echo BASE_PATH; ?>/admin-dashboard.php" class="admin-logo">
                     <div class="admin-logo-mark">A</div>
                     <span class="admin-logo-text">JagoNugas</span>
                     <span class="admin-badge">Admin</span>
                 </a>
                 <nav class="admin-nav-links">
-                    <a href="<?php echo BASE_PATH; ?>/admin/dashboard" class="active">Dashboard</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/users">Users</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/mentors">Mentors</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/transactions">Transaksi</a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/settings">Settings</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-dashboard.php" class="active">Dashboard</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-users.php">Users</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-mentors.php">Mentors</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-transactions.php">Transaksi</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-settings.php">Settings</a>
                 </nav>
             </div>
             
@@ -53,10 +52,10 @@ $pendapatanBulan = 12500000;
                     </div>
                     <i class="bi bi-chevron-down"></i>
                     <div class="admin-dropdown">
-                        <a href="<?php echo BASE_PATH; ?>/admin/profile"><i class="bi bi-person"></i> Profil</a>
-                        <a href="<?php echo BASE_PATH; ?>/admin/settings"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <a href="<?php echo BASE_PATH; ?>/admin-profile.php"><i class="bi bi-person"></i> Profil</a>
+                        <a href="<?php echo BASE_PATH; ?>/admin-settings.php"><i class="bi bi-gear"></i> Pengaturan</a>
                         <div class="dropdown-divider"></div>
-                        <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                        <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>
@@ -71,7 +70,7 @@ $pendapatanBulan = 12500000;
                 <p>Kelola seluruh sistem JagoNugas dari sini</p>
             </div>
             <div class="welcome-action">
-                <a href="<?php echo BASE_PATH; ?>/admin/reports" class="btn btn-admin-outline">
+                <a href="<?php echo BASE_PATH; ?>/admin-reports.php" class="btn btn-admin-outline">
                     <i class="bi bi-file-earmark-text"></i>
                     Lihat Laporan
                 </a>
@@ -128,7 +127,7 @@ $pendapatanBulan = 12500000;
             <section class="admin-section">
                 <div class="admin-section-header">
                     <h2><i class="bi bi-person-fill"></i> User Terbaru</h2>
-                    <a href="<?php echo BASE_PATH; ?>/admin/users" class="section-link">Lihat Semua</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-users.php" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="admin-table-wrapper">
                     <table class="admin-table">
@@ -168,7 +167,7 @@ $pendapatanBulan = 12500000;
             <section class="admin-section">
                 <div class="admin-section-header">
                     <h2><i class="bi bi-credit-card"></i> Transaksi Terbaru</h2>
-                    <a href="<?php echo BASE_PATH; ?>/admin/transactions" class="section-link">Lihat Semua</a>
+                    <a href="<?php echo BASE_PATH; ?>/admin-transactions.php" class="section-link">Lihat Semua</a>
                 </div>
                 <div class="admin-table-wrapper">
                     <table class="admin-table">
@@ -210,27 +209,27 @@ $pendapatanBulan = 12500000;
                     <h2><i class="bi bi-lightning-fill"></i> Aksi Cepat</h2>
                 </div>
                 <div class="admin-action-grid">
-                    <a href="<?php echo BASE_PATH; ?>/admin/users" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-users.php" class="admin-action-card">
                         <div class="action-icon blue"><i class="bi bi-people-fill"></i></div>
                         <span>Kelola Users</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/mentors" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-mentors.php" class="admin-action-card">
                         <div class="action-icon purple"><i class="bi bi-mortarboard-fill"></i></div>
                         <span>Kelola Mentors</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/transactions" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-transactions.php" class="admin-action-card">
                         <div class="action-icon green"><i class="bi bi-credit-card-fill"></i></div>
                         <span>Transaksi</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/forum" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-forum.php" class="admin-action-card">
                         <div class="action-icon cyan"><i class="bi bi-chat-square-text-fill"></i></div>
                         <span>Forum</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/packages" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-packages.php" class="admin-action-card">
                         <div class="action-icon yellow"><i class="bi bi-box-fill"></i></div>
                         <span>Paket Gem</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/admin/settings" class="admin-action-card">
+                    <a href="<?php echo BASE_PATH; ?>/admin-settings.php" class="admin-action-card">
                         <div class="action-icon gray"><i class="bi bi-gear-fill"></i></div>
                         <span>Settings</span>
                     </a>

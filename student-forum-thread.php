@@ -1,13 +1,14 @@
 <?php
-require_once __DIR__ . '/../config.php';
-require_once 'includes/NotificationHelper.php';
+// student-forum-thread.php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/NotificationHelper.php';
 
-$threadId = (int)($routeParams['id'] ?? $_GET['id'] ?? 0);
+$threadId = (int)($_GET['id'] ?? 0);
 $userId = $_SESSION['user_id'] ?? null;
 $name = $_SESSION['name'] ?? 'Guest';
 
 if (!$threadId) {
-    header("Location: " . BASE_PATH . "/forum");
+    header("Location: " . BASE_PATH . "/student-forum.php");
     exit;
 }
 
@@ -24,7 +25,7 @@ $stmt->execute([$threadId]);
 $thread = $stmt->fetch();
 
 if (!$thread) {
-    header("Location: " . BASE_PATH . "/forum");
+    header("Location: " . BASE_PATH . "/student-forum.php");
     exit;
 }
 
@@ -42,7 +43,7 @@ if (isset($_POST['delete_thread']) && $userId == $thread['author_id']) {
         $stmt->execute([$threadId]);
         $files = $stmt->fetchAll();
         foreach ($files as $file) {
-            $filePath = __DIR__ . '/../' . $file['file_path'];
+            $filePath = __DIR__ . '/' . $file['file_path'];
             if (file_exists($filePath)) {
                 unlink($filePath);
             }
@@ -57,7 +58,7 @@ if (isset($_POST['delete_thread']) && $userId == $thread['author_id']) {
         $stmt->execute([$threadId]);
         $replyFiles = $stmt->fetchAll();
         foreach ($replyFiles as $file) {
-            $filePath = __DIR__ . '/../' . $file['file_path'];
+            $filePath = __DIR__ . '/' . $file['file_path'];
             if (file_exists($filePath)) {
                 unlink($filePath);
             }
@@ -120,7 +121,7 @@ if (isset($_POST['delete_thread']) && $userId == $thread['author_id']) {
             );
         }
         
-        header("Location: " . BASE_PATH . "/forum?deleted=1");
+        header("Location: " . BASE_PATH . "/student-forum.php?deleted=1");
         exit;
     } catch (Exception $e) {
         $pdo->rollBack();
@@ -166,7 +167,7 @@ unset($reply);
 $replyError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
     if (!$userId) {
-        header("Location: " . BASE_PATH . "/login?redirect=forum/thread/$threadId");
+        header("Location: " . BASE_PATH . "/login.php?redirect=student-forum-thread.php?id=$threadId");
         exit;
     }
     
@@ -187,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
             
             // Handle file uploads
             if (!empty($_FILES['attachments']['name'][0])) {
-                $uploadDir = __DIR__ . '/../uploads/replies/';
+                $uploadDir = __DIR__ . '/uploads/replies/';
                 if (!is_dir($uploadDir)) {
                     mkdir($uploadDir, 0777, true);
                 }
@@ -225,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
             }
             
             $pdo->commit();
-            header("Location: " . BASE_PATH . "/forum/thread/$threadId?success=1#reply-$replyId");
+            header("Location: " . BASE_PATH . "/student-forum-thread.php?id=$threadId&success=1#reply-$replyId");
             exit;
             
         } catch (Exception $e) {
@@ -261,7 +262,7 @@ if (isset($_GET['best']) && $userId == $thread['author_id'] && !$thread['is_solv
             
             $pdo->commit();
             
-            header("Location: " . BASE_PATH . "/forum/thread/$threadId?best_selected=1");
+            header("Location: " . BASE_PATH . "/student-forum-thread.php?id=$threadId&best_selected=1");
             exit;
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -301,18 +302,18 @@ function time_elapsed($datetime) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($thread['title']); ?> - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="forum-page">
-    <?php include 'partials/navbar.php'; ?>
+    <?php include __DIR__ . '/student-navbar.php'; ?>
 
     <div class="thread-container">
         <!-- Breadcrumb -->
         <nav class="thread-breadcrumb">
-            <a href="<?php echo BASE_PATH; ?>/forum">Forum</a>
+            <a href="<?php echo BASE_PATH; ?>/student-forum.php">Forum</a>
             <i class="bi bi-chevron-right"></i>
-            <a href="<?php echo BASE_PATH; ?>/forum?category=<?php echo $thread['category_slug']; ?>">
+            <a href="<?php echo BASE_PATH; ?>/student-forum.php?category=<?php echo $thread['category_slug']; ?>">
                 <?php echo htmlspecialchars($thread['category_name']); ?>
             </a>
             <i class="bi bi-chevron-right"></i>
@@ -410,7 +411,7 @@ function time_elapsed($datetime) {
                 
                 <?php if ($userId == $thread['author_id']): ?>
                 <div class="thread-actions">
-                    <a href="<?php echo BASE_PATH; ?>/forum/edit/<?php echo $threadId; ?>" class="btn btn-sm btn-outline">
+                    <a href="<?php echo BASE_PATH; ?>/student-forum-edit.php?id=<?php echo $threadId; ?>" class="btn btn-sm btn-outline">
                         <i class="bi bi-pencil"></i> Edit
                     </a>
                     <button type="button" class="btn btn-sm btn-outline btn-danger-outline" onclick="openDeleteModal()">
@@ -530,7 +531,7 @@ function time_elapsed($datetime) {
             </div>
             <?php endif; ?>
             
-            <form method="POST" enctype="multipart/form-data" action="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $threadId; ?>#reply-form">
+            <form method="POST" enctype="multipart/form-data" action="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>#reply-form">
                 <div class="form-group">
                     <textarea name="reply_content" rows="5" 
                               placeholder="Tulis jawabanmu di sini. Jelaskan dengan detail dan jelas..."
@@ -559,7 +560,7 @@ function time_elapsed($datetime) {
         <?php else: ?>
         <div class="thread-login-prompt">
             <i class="bi bi-lock"></i>
-            <p>Silakan <a href="<?php echo BASE_PATH; ?>/login?redirect=forum/thread/<?php echo $threadId; ?>">login</a> untuk menjawab pertanyaan ini.</p>
+            <p>Silakan <a href="<?php echo BASE_PATH; ?>/login.php?redirect=student-forum-thread.php?id=<?php echo $threadId; ?>">login</a> untuk menjawab pertanyaan ini.</p>
         </div>
         <?php endif; ?>
     </div>
@@ -641,7 +642,7 @@ function time_elapsed($datetime) {
 
     function openBestAnswerModal(replyId) {
         if (bestAnswerModal) {
-            document.getElementById('confirmBestAnswerLink').href = '?best=' + replyId;
+            document.getElementById('confirmBestAnswerLink').href = '?id=<?php echo $threadId; ?>&best=' + replyId;
             bestAnswerModal.classList.add('active');
             document.body.style.overflow = 'hidden';
         }
@@ -680,7 +681,7 @@ function time_elapsed($datetime) {
             const replyId = this.dataset.replyId;
             
             try {
-                const res = await fetch('<?php echo BASE_PATH; ?>/api/forum/upvote', {
+                const res = await fetch('<?php echo BASE_PATH; ?>/api-forum-upvote.php', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({reply_id: replyId})
@@ -693,7 +694,7 @@ function time_elapsed($datetime) {
                     this.querySelector('i').className = data.upvoted ? 'bi bi-hand-thumbs-up-fill' : 'bi bi-hand-thumbs-up';
                     this.querySelector('span').textContent = data.count;
                 } else if (data.error === 'Not logged in') {
-                    window.location.href = '<?php echo BASE_PATH; ?>/login?redirect=forum/thread/<?php echo $threadId; ?>';
+                    window.location.href = '<?php echo BASE_PATH; ?>/login.php?redirect=student-forum-thread.php?id=<?php echo $threadId; ?>';
                 }
             } catch (e) {
                 console.error(e);

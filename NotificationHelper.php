@@ -49,20 +49,22 @@ class NotificationHelper {
             'icon' => 'reply',
             'color' => '#f59e0b'
         ],
+        'upvote_received' => [
+            'title' => 'Upvote Diterima! 👍',
+            'icon' => 'hand-thumbs-up',
+            'color' => '#10b981'
+        ],
         'gem_bonus' => [
-    'title' => 'Bonus Gem! 🎁',
-    'icon' => 'gift-fill',
-    'color' => '#f59e0b'
-]
+            'title' => 'Bonus Gem! 🎁',
+            'icon' => 'gift-fill',
+            'color' => '#f59e0b'
+        ]
     ];
     
     public function __construct($pdo) {
         $this->pdo = $pdo;
     }
     
-    /**
-     * Buat notifikasi baru
-     */
     public function create($userId, $type, $message, $relatedId = null, $relatedType = null) {
         try {
             $typeData = self::TYPES[$type] ?? [
@@ -92,20 +94,10 @@ class NotificationHelper {
         }
     }
     
-    /**
-     * Notifikasi: Welcome setelah register
-     */
     public function welcome($userId) {
-        return $this->create(
-            $userId,
-            'welcome',
-            'Halo! Selamat bergabung di JagoNugas.'
-        );
+        return $this->create($userId, 'welcome', 'Halo! Selamat bergabung di JagoNugas.');
     }
     
-    /**
-     * Notifikasi: Ada yang reply thread kita
-     */
     public function newReplyToThread($threadOwnerId, $replierName, $threadId, $threadTitle) {
         return $this->create(
             $threadOwnerId,
@@ -116,9 +108,6 @@ class NotificationHelper {
         );
     }
     
-    /**
-     * Notifikasi: Jawaban dipilih sebagai terbaik + dapat gem
-     */
     public function bestAnswer($userId, $gemAmount, $threadId) {
         return $this->create(
             $userId,
@@ -129,9 +118,6 @@ class NotificationHelper {
         );
     }
     
-    /**
-     * Notifikasi: Dapat balasan dari reply kita
-     */
     public function replyToReply($originalReplierId, $replierName, $threadId) {
         return $this->create(
             $originalReplierId,
@@ -142,20 +128,10 @@ class NotificationHelper {
         );
     }
     
-    /**
-     * Notifikasi: Profil diupdate
-     */
     public function profileUpdated($userId, $what = 'profil') {
-        return $this->create(
-            $userId,
-            'profile_updated',
-            ucfirst($what) . ' berhasil diperbarui.'
-        );
+        return $this->create($userId, 'profile_updated', ucfirst($what) . ' berhasil diperbarui.');
     }
     
-    /**
-     * Notifikasi: Thread dibuat
-     */
     public function threadCreated($userId, $threadId, $threadTitle) {
         return $this->create(
             $userId,
@@ -166,19 +142,11 @@ class NotificationHelper {
         );
     }
     
-    /**
-     * Notifikasi: Dapat gem
-     */
     public function gemReceived($userId, $amount, $reason) {
-        return $this->create(
-            $userId,
-            'gem_received',
-            'Kamu mendapat +' . $amount . ' Gem dari ' . $reason
-        );
+        return $this->create($userId, 'gem_received', 'Kamu mendapat +' . $amount . ' Gem dari ' . $reason);
     }
 }
 
-// Global function untuk kemudahan
 function getNotificationHelper($pdo) {
     return new NotificationHelper($pdo);
 }

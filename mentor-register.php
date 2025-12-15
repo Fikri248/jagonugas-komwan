@@ -1,7 +1,6 @@
 <?php
-// pages/mentor/register.php
-require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../ModelUser.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ModelUser.php';
 
 $error = '';
 $success = '';
@@ -80,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Generate unique filename
             $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
             $filename = 'transkrip_' . time() . '_' . uniqid() . '.' . $extension;
-            $uploadPath = __DIR__ . '/../../uploads/transkrip/';
+            $uploadPath = __DIR__ . '/uploads/transkrip/';
             
             // Buat folder jika belum ada
             if (!is_dir($uploadPath)) {
@@ -120,11 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daftar Mentor - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
 </head>
 <body class="auth-page">
     <div class="auth-card auth-card-mentor auth-card-wide">
-        <a href="<?php echo BASE_PATH; ?>/" class="auth-back-btn">
+        <a href="<?php echo BASE_PATH; ?>/index.php" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -168,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="pending-icon">⏳</div>
                 <h3>Menunggu Verifikasi</h3>
                 <p>Tim admin sedang mereview transkrip nilai kamu. Kamu akan menerima notifikasi setelah akun diverifikasi.</p>
-                <a href="<?php echo BASE_PATH; ?>/mentor/login" class="btn btn-mentor btn-full">Cek Status Login</a>
+                <a href="<?php echo BASE_PATH; ?>/mentor-login.php" class="btn btn-mentor btn-full">Cek Status Login</a>
             </div>
         <?php else: ?>
 
@@ -245,7 +244,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
                 <label>Upload Transkrip Nilai <span class="required">*</span></label>
                 
-                <!-- File input di LUAR upload-area -->
                 <input type="file" name="transkrip" id="transkrip" class="file-input-hidden" accept=".pdf,.jpg,.jpeg,.png" required>
                 
                 <div class="upload-area" id="uploadArea">
@@ -311,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <p class="auth-footer-text">
-            Sudah punya akun mentor? <a href="<?php echo BASE_PATH; ?>/mentor/login">Login di sini</a>
+            Sudah punya akun mentor? <a href="<?php echo BASE_PATH; ?>/mentor-login.php">Login di sini</a>
         </p>
 
         <?php endif; ?>
@@ -368,7 +366,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const previewSize = document.getElementById('previewSize');
         const removeFile = document.getElementById('removeFile');
 
-        // Klik upload area = buka file dialog
         uploadArea.addEventListener('click', function(e) {
             if (e.target === removeFile || removeFile.contains(e.target)) {
                 return;
@@ -376,21 +373,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             fileInput.click();
         });
 
-        // Drag over
         uploadArea.addEventListener('dragover', function(e) {
             e.preventDefault();
             e.stopPropagation();
             uploadArea.classList.add('dragover');
         });
 
-        // Drag leave
         uploadArea.addEventListener('dragleave', function(e) {
             e.preventDefault();
             e.stopPropagation();
             uploadArea.classList.remove('dragover');
         });
 
-        // Drop file
         uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -405,14 +399,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
 
-        // File input change
         fileInput.addEventListener('change', function() {
             if (this.files.length > 0) {
                 handleFileSelect(this.files[0]);
             }
         });
 
-        // Remove file
         removeFile.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -420,7 +412,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             uploadArea.classList.remove('has-file');
         });
 
-        // Handle file selection
         function handleFileSelect(file) {
             const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
             const maxSize = 5 * 1024 * 1024;
@@ -442,7 +433,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             uploadArea.classList.add('has-file');
         }
 
-        // Format file size
         function formatFileSize(bytes) {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';

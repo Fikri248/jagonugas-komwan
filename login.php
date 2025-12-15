@@ -1,21 +1,18 @@
 <?php
-// pages/mentor/login.php
-require_once __DIR__ . '/../../config.php';
-require_once __DIR__ . '/../../ModelUser.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ModelUser.php';
 
-// Redirect jika sudah login sebagai mentor
+// Redirect jika sudah login
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['role'] ?? 'student';
-    if ($role === 'mentor') {
-        header("Location: " . BASE_PATH . "/mentor/dashboard");
-        exit;
-    } elseif ($role === 'admin') {
-        header("Location: " . BASE_PATH . "/admin/dashboard");
-        exit;
+    if ($role === 'admin') {
+        header("Location: " . BASE_PATH . "/admin-dashboard.php");
+    } elseif ($role === 'mentor') {
+        header("Location: " . BASE_PATH . "/mentor-dashboard.php");
     } else {
-        header("Location: " . BASE_PATH . "/dashboard");
-        exit;
+        header("Location: " . BASE_PATH . "/student-dashboard.php");
     }
+    exit;
 }
 
 $error = '';
@@ -36,22 +33,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = $user->login();
 
         if ($result['success']) {
-            // Cek apakah role-nya mentor
-            if ($result['user']['role'] !== 'mentor') {
-                $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
-            } elseif (!$result['user']['is_verified']) {
-                // Cek status verifikasi
-                $error = 'Akun mentor belum diverifikasi oleh admin. Mohon tunggu 1x24 jam.';
+            // Cek jika mentor belum diverifikasi
+            if ($result['user']['role'] === 'mentor' && !$result['user']['is_verified']) {
+                $error = 'Akun mentor belum diverifikasi. Tunggu konfirmasi dari admin.';
             } else {
-                // Login berhasil
                 session_regenerate_id(true);
 
                 $_SESSION['user_id'] = $result['user']['id'];
                 $_SESSION['name'] = $result['user']['name'];
                 $_SESSION['email'] = $result['user']['email'];
                 $_SESSION['role'] = $result['user']['role'];
+                $_SESSION['login_time'] = time();
+                $_SESSION['avatar'] = $result['user']['avatar'] ?? null;
 
-                header("Location: " . BASE_PATH . "/mentor/dashboard");
+                // Redirect berdasarkan role
+                switch ($result['user']['role']) {
+                    case 'admin':
+                        header("Location: " . BASE_PATH . "/admin-dashboard.php");
+                        break;
+                    case 'mentor':
+                        header("Location: " . BASE_PATH . "/mentor-dashboard.php");
+                        break;
+                    default:
+                        header("Location: " . BASE_PATH . "/student-dashboard.php");
+                }
                 exit;
             }
         } else {
@@ -65,30 +70,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Mentor - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <title>Login - JagoNugas</title>
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
 </head>
 <body class="auth-page">
-    <div class="auth-card auth-card-mentor">
-        <a href="<?php echo BASE_PATH; ?>/" class="auth-back-btn">
+    <div class="auth-card">
+        <a href="<?php echo BASE_PATH; ?>/index.php" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Kembali
         </a>
 
-        <div class="auth-badge-mentor">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Portal Mentor
-        </div>
-
-        <h1 class="auth-title">Login Mentor</h1>
-        <p class="auth-subtitle">Masuk untuk mulai membantu mahasiswa</p>
+        <h1 class="auth-title">Selamat Datang Kembali</h1>
+        <p class="auth-subtitle">Masuk ke akun JagoNugas lo</p>
 
         <?php if ($error): ?>
             <div class="alert alert-error">
@@ -106,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" class="auth-input" 
                        value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" 
-                       placeholder="email.mentor@telkomuniversity.ac.id" required>
+                       placeholder="contoh@student.telkomuniversity.ac.id" required>
             </div>
 
             <div class="form-group">
@@ -116,26 +111,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="form-group" style="text-align: right;">
-                <a href="<?php echo BASE_PATH; ?>/forgot-password" class="auth-link">Lupa password?</a>
+                <a href="<?php echo BASE_PATH; ?>/forgot-password.php" class="auth-link">Lupa password?</a>
             </div>
 
-            <button type="submit" class="btn btn-mentor auth-button">Login sebagai Mentor</button>
+            <button type="submit" class="btn btn-primary auth-button">Login</button>
         </form>
 
         <p class="auth-footer-text">
-            Belum jadi mentor? <a href="<?php echo BASE_PATH; ?>/mentor/register">Daftar jadi Mentor</a>
+            Belum punya akun? <a href="<?php echo BASE_PATH; ?>/register.php">Daftar gratis</a>
         </p>
 
         <div class="auth-divider">
             <span>atau</span>
         </div>
 
-        <a href="<?php echo BASE_PATH; ?>/login" class="btn-student-login">
+        <a href="<?php echo BASE_PATH; ?>/mentor-login.php" class="btn-mentor-login">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            Login sebagai Mahasiswa
+            Login sebagai Mentor
         </a>
     </div>
 </body>

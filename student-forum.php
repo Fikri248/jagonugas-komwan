@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 
 $userId = $_SESSION['user_id'] ?? null;
 $name = $_SESSION['name'] ?? 'Guest';
@@ -35,7 +35,6 @@ if ($filter === 'unanswered') {
 } elseif ($filter === 'solved') {
     $where[] = "ft.is_solved = 1";
 } elseif ($filter === 'my' && $userId) {
-    // Filter: Pertanyaan Saya
     $where[] = "ft.user_id = ?";
     $params[] = $userId;
 }
@@ -51,7 +50,7 @@ $countStmt->execute($params);
 $totalThreads = $countStmt->fetchColumn();
 $totalPages = ceil($totalThreads / $perPage);
 
-// Get threads (+ avatar)
+// Get threads
 $sql = "SELECT 
             ft.id, 
             ft.title, 
@@ -116,11 +115,11 @@ if (isset($_GET['deleted'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Forum Diskusi <?php echo $currentCategory ? '- ' . $currentCategory['name'] : ''; ?> - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="forum-page">
-    <?php include 'partials/navbar.php'; ?>
+    <?php include __DIR__ . '/student-navbar.php'; ?>
 
     <div class="forum-container">
         <!-- Sidebar Categories -->
@@ -129,14 +128,14 @@ if (isset($_GET['deleted'])) {
                 <h3>Kategori</h3>
                 <ul class="forum-category-list">
                     <li>
-                        <a href="<?php echo BASE_PATH; ?>/forum" class="<?php echo !$categorySlug ? 'active' : ''; ?>">
+                        <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="<?php echo !$categorySlug ? 'active' : ''; ?>">
                             <i class="bi bi-grid"></i>
                             <span>Semua Kategori</span>
                         </a>
                     </li>
                     <?php foreach ($categories as $cat): ?>
                     <li>
-                        <a href="<?php echo BASE_PATH; ?>/forum?category=<?php echo $cat['slug']; ?>" 
+                        <a href="<?php echo BASE_PATH; ?>/student-forum.php?category=<?php echo $cat['slug']; ?>" 
                            class="<?php echo $categorySlug === $cat['slug'] ? 'active' : ''; ?>">
                             <i class="bi <?php echo $cat['icon']; ?>"></i>
                             <span><?php echo htmlspecialchars($cat['name']); ?></span>
@@ -147,11 +146,11 @@ if (isset($_GET['deleted'])) {
             </div>
 
             <?php if ($userId): ?>
-            <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-primary btn-full">
+            <a href="<?php echo BASE_PATH; ?>/student-forum-create.php" class="btn btn-primary btn-full">
                 <i class="bi bi-plus-lg"></i> Buat Pertanyaan
             </a>
             <?php else: ?>
-            <a href="<?php echo BASE_PATH; ?>/login?redirect=forum/create" class="btn btn-primary btn-full">
+            <a href="<?php echo BASE_PATH; ?>/login.php?redirect=student-forum-create.php" class="btn btn-primary btn-full">
                 <i class="bi bi-plus-lg"></i> Buat Pertanyaan
             </a>
             <?php endif; ?>
@@ -193,7 +192,7 @@ if (isset($_GET['deleted'])) {
                     </p>
                 </div>
                 <div class="forum-header-right">
-                    <form class="forum-search" method="GET" action="<?php echo BASE_PATH; ?>/forum">
+                    <form class="forum-search" method="GET" action="<?php echo BASE_PATH; ?>/student-forum.php">
                         <?php if ($categorySlug): ?>
                         <input type="hidden" name="category" value="<?php echo htmlspecialchars($categorySlug); ?>">
                         <?php endif; ?>
@@ -229,66 +228,17 @@ if (isset($_GET['deleted'])) {
                 <?php endif; ?>
             </div>
 
-            <!-- Search Result Banner -->
-            <?php if ($search): ?>
-            <div class="search-result-banner">
-                <div class="search-result-icon">
-                    <i class="bi bi-search"></i>
-                </div>
-                <div class="search-result-content">
-                    <h4>Hasil pencarian untuk "<span><?php echo htmlspecialchars($search); ?></span>"</h4>
-                    <p>Ditemukan <strong><?php echo $totalThreads; ?></strong> pertanyaan yang cocok</p>
-                </div>
-                <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?><?php echo $filter === 'my' ? ($categorySlug ? '&' : '?') . 'filter=my' : ''; ?>" class="search-result-clear">
-                    <i class="bi bi-x-lg"></i>
-                    <span>Hapus</span>
-                </a>
-            </div>
-            <?php endif; ?>
-
             <!-- Thread List -->
             <div class="forum-thread-list">
                 <?php if (empty($threads)): ?>
-                    <?php if ($search): ?>
-                    <!-- Empty Search Result -->
-                    <div class="search-empty-state">
-                        <div class="empty-icon">
-                            <i class="bi bi-search"></i>
-                        </div>
-                        <h3>Tidak Ada Hasil</h3>
-                        <p>Tidak ada pertanyaan yang cocok dengan "<strong><?php echo htmlspecialchars($search); ?></strong>". Coba kata kunci lain atau buat pertanyaan baru.</p>
-                        <div class="empty-actions">
-                            <a href="<?php echo BASE_PATH; ?>/forum<?php echo $categorySlug ? "?category=$categorySlug" : ''; ?><?php echo $filter === 'my' ? ($categorySlug ? '&' : '?') . 'filter=my' : ''; ?>" class="btn btn-outline">
-                                <i class="bi bi-arrow-left"></i> Lihat Semua
-                            </a>
-                            <?php if ($userId): ?>
-                            <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-primary">
-                                <i class="bi bi-plus-lg"></i> Buat Pertanyaan
-                            </a>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php elseif ($filter === 'my'): ?>
-                    <!-- Empty My Questions -->
                     <div class="forum-empty">
                         <i class="bi bi-chat-square-text"></i>
                         <h3>Belum Ada Pertanyaan</h3>
-                        <p>Lo belum pernah mengajukan pertanyaan. Yuk mulai tanya!</p>
-                        <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-primary">
-                            <i class="bi bi-plus-lg"></i> Buat Pertanyaan
-                        </a>
-                    </div>
-                    <?php else: ?>
-                    <!-- Normal Empty State -->
-                    <div class="forum-empty">
-                        <i class="bi bi-chat-square-text"></i>
-                        <h3>Belum Ada Pertanyaan</h3>
-                        <p><?php echo $filter === 'unanswered' ? 'Semua pertanyaan sudah dijawab!' : ($filter === 'solved' ? 'Belum ada pertanyaan yang terjawab.' : 'Jadi yang pertama bertanya!'); ?></p>
+                        <p>Jadi yang pertama bertanya!</p>
                         <?php if ($userId): ?>
-                        <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-primary">Buat Pertanyaan</a>
+                        <a href="<?php echo BASE_PATH; ?>/student-forum-create.php" class="btn btn-primary">Buat Pertanyaan</a>
                         <?php endif; ?>
                     </div>
-                    <?php endif; ?>
                 <?php else: ?>
                     <?php foreach ($threads as $thread): ?>
                     <article class="forum-thread-card <?php echo $thread['is_solved'] ? 'solved' : ''; ?>">
@@ -313,7 +263,7 @@ if (isset($_GET['deleted'])) {
                             </div>
                             
                             <h3 class="forum-thread-title">
-                                <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $thread['id']; ?>">
+                                <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $thread['id']; ?>">
                                     <?php echo htmlspecialchars($thread['title']); ?>
                                 </a>
                             </h3>
@@ -366,7 +316,6 @@ if (isset($_GET['deleted'])) {
     </div>
 
     <script>
-    // Auto-hide success alert
     const successAlert = document.querySelector('.alert-success');
     if (successAlert) {
         setTimeout(() => {

@@ -1,5 +1,5 @@
 <?php
-// app.php
+// app.php - Simple Router untuk struktur flat
 
 require_once __DIR__ . '/config.php';
 
@@ -18,131 +18,140 @@ switch (true) {
     // ===== PUBLIC ROUTES =====
     case $request === '':
     case $request === 'home':
-        require 'pages/home.php';
+        require __DIR__ . '/index.php';
         break;
     
     case $request === 'login':
-        require 'pages/login.php';
+        require __DIR__ . '/login.php';
         break;
     
     case $request === 'register':
-        require 'pages/register.php';
+        require __DIR__ . '/register.php';
         break;
     
     case $request === 'logout':
-        require 'pages/logout.php';
+        require __DIR__ . '/logout.php';
         break;
     
     case $request === 'forgot-password':
-        require 'pages/forgot-password.php';
+        require __DIR__ . '/forgot-password.php';
         break;
     
     case $request === 'reset-password':
-        require 'pages/reset-password.php';
+        require __DIR__ . '/reset-password.php';
         break;
 
-    // ===== DASHBOARD =====
+    // ===== STUDENT DASHBOARD =====
     case $request === 'dashboard':
-        require 'pages/dashboard.php';
+        require __DIR__ . '/student-dashboard.php';
         break;
     
     case $request === 'diskusi':
-        require 'pages/diskusi.php';
+        require __DIR__ . '/student-diskusi.php';
         break;
 
     case $request === 'settings':
-        require 'pages/settings.php';
+        require __DIR__ . '/student-settings.php';
         break;
 
     // ===== FORUM ROUTES =====
     case $request === 'forum':
-        require 'pages/forum.php';
+        require __DIR__ . '/student-forum.php';
         break;
     
     case $request === 'forum/create':
-        require 'pages/forum-create.php';
+        require __DIR__ . '/student-forum-create.php';
         break;
     
     case preg_match('#^forum/edit/(\d+)$#', $request, $matches) === 1:
-        $routeParams['id'] = $matches[1];
-        require 'pages/forum-edit.php';
+        $_GET['id'] = $matches[1];
+        require __DIR__ . '/student-forum-edit.php';
         break;
     
     case preg_match('#^forum/thread/(\d+)$#', $request, $matches) === 1:
-        $routeParams['id'] = $matches[1];
-        require 'pages/forum-thread.php';
+        $_GET['id'] = $matches[1];
+        require __DIR__ . '/student-forum-thread.php';
         break;
 
-    // ===== MENTOR ROUTES =====
+    // ===== MENTOR PUBLIC =====
     case $request === 'mentor':
-        require 'pages/mentor.php';
+        require __DIR__ . '/student-mentor.php';
         break;
 
+    // ===== MENTOR PANEL =====
     case $request === 'mentor/login':
-        require 'pages/mentor/login.php';
+        require __DIR__ . '/mentor-login.php';
         break;
 
     case $request === 'mentor/register':
-        require 'pages/mentor/register.php';
+        require __DIR__ . '/mentor-register.php';
         break;
 
     case $request === 'mentor/dashboard':
-        require 'pages/mentor/dashboard.php';
+        require __DIR__ . '/mentor-dashboard.php';
         break;
     
     case $request === 'mentor/bookings':
-        require 'pages/mentor/bookings.php';
+        require __DIR__ . '/mentor-bookings.php';
         break;
     
     case $request === 'mentor/chat':
-        require 'pages/mentor/chat.php';
+        require __DIR__ . '/mentor-chat.php';
         break;
     
     case $request === 'mentor/profile':
-        require 'pages/mentor/profile.php';
+        require __DIR__ . '/mentor-profile.php';
         break;
     
     case $request === 'mentor/settings':
-        require 'pages/mentor/settings.php';
+        require __DIR__ . '/mentor-settings.php';
         break;
     
     case $request === 'mentor/availability':
-        require 'pages/mentor/availability.php';
+        require __DIR__ . '/mentor-availability.php';
         break;
 
     // ===== ADMIN ROUTES =====
     case $request === 'admin/dashboard':
-        require 'pages/admin/dashboard.php';
+        require __DIR__ . '/admin-dashboard.php';
         break;
 
     case $request === 'admin/users':
-        require 'pages/admin/users.php';
+        require __DIR__ . '/admin-users.php';
         break;
 
     case $request === 'admin/mentors':
-        require 'pages/admin/mentors.php';
+        require __DIR__ . '/admin-mentors.php';
         break;
     
     case $request === 'admin/transactions':
-        require 'pages/admin/transactions.php';
+        require __DIR__ . '/admin-transactions.php';
         break;
     
     case $request === 'admin/settings':
-        require 'pages/admin/settings.php';
+        require __DIR__ . '/admin-settings.php';
         break;
     
     case $request === 'admin/reports':
-        require 'pages/admin/reports.php';
+        require __DIR__ . '/admin-reports.php';
         break;
 
     // ===== API ROUTES =====
     case $request === 'api/forum/upvote':
-        require 'api/forum-upvote.php';
+        require __DIR__ . '/api-forum-upvote.php';
+        break;
+    
+    case $request === 'api/notifications/read':
+        require __DIR__ . '/api-notif-read.php';
+        break;
+    
+    case $request === 'api/notifications/read-all':
+        require __DIR__ . '/api-notif-read-all.php';
         break;
 
     // ===== 404 =====
     default:
         http_response_code(404);
-        require 'pages/404.php'; // Buat halaman 404 yang proper
+        require __DIR__ . '/404.php';
         break;
 }

@@ -1,9 +1,9 @@
 <?php
-require_once __DIR__ . '/../config.php';
-require 'ModelDiskusi.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ModelDiskusi.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     $diskusi->create();
-    header("Location: " . BASE_PATH . "/diskusi");
+    header("Location: " . BASE_PATH . "/student-diskusi.php");
     exit;
 }
 
@@ -35,7 +35,7 @@ $pertanyaans = $diskusi->getAll();
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Diskusi</title>
+    <title>Diskusi - JagoNugas</title>
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
 </head>
 <body>
@@ -57,6 +57,6 @@ $pertanyaans = $diskusi->getAll();
             <small><?php echo htmlspecialchars($row['created_at']); ?></small><hr>
         </div>
     <?php endforeach; ?>
-    <a href="<?php echo BASE_PATH; ?>/dashboard">Kembali</a>
+    <a href="<?php echo BASE_PATH; ?>/student-dashboard.php">Kembali</a>
 </body>
 </html>

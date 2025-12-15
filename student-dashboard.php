@@ -1,20 +1,18 @@
 <?php
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/config.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: " . BASE_PATH . "/login");
+    header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
 $userId = $_SESSION['user_id'];
 $loginTime = $_SESSION['login_time'] ?? time();
 
-// Get user data lengkap
 $currentUser = null;
 $gemBalance = 0;
 $name = 'User';
 
-// Success message dari redirect
 $successMsg = '';
 if (isset($_GET['profile_updated'])) {
     $successMsg = 'Profil berhasil diperbarui!';
@@ -33,7 +31,6 @@ try {
     $name = $_SESSION['name'] ?? 'User';
 }
 
-// Hitung waktu aktif
 $activeSeconds = time() - $loginTime;
 
 function formatActiveTime($seconds) {
@@ -49,7 +46,6 @@ function formatActiveTime($seconds) {
 }
 $activeTimeFormatted = formatActiveTime($activeSeconds);
 
-// Stats: Jawaban yang lo bantu (hitung per thread, bukan per reply)
 $totalReplies = 0;
 try {
     $stmt = $pdo->prepare("
@@ -61,7 +57,6 @@ try {
     $totalReplies = $stmt->fetchColumn();
 } catch (Exception $e) {}
 
-// Stats: Gem yang lo dapet
 $totalGemsEarned = 0;
 try {
     $stmt = $pdo->prepare("
@@ -74,7 +69,6 @@ try {
     $totalGemsEarned = $stmt->fetchColumn();
 } catch (Exception $e) {}
 
-// Ambil pertanyaan milik sendiri
 $myQuestions = [];
 try {
     $stmt = $pdo->prepare("
@@ -91,8 +85,6 @@ try {
     $myQuestions = $stmt->fetchAll();
 } catch (Exception $e) {}
 
-// Ambil pertanyaan dari mahasiswa lain
-// Jika ada myQuestions = LIMIT 3, jika tidak ada = LIMIT 1
 $recentQuestionsLimit = !empty($myQuestions) ? 3 : 1;
 $recentQuestions = [];
 try {
@@ -110,7 +102,6 @@ try {
     $recentQuestions = $stmt->fetchAll();
 } catch (Exception $e) {}
 
-// Ambil mentor populer
 $popularMentors = [];
 try {
     $stmt = $pdo->query("
@@ -124,7 +115,6 @@ try {
     $popularMentors = $stmt->fetchAll();
 } catch (Exception $e) {}
 
-// Helper function
 function time_elapsed($datetime) {
     $tz = new DateTimeZone('Asia/Jakarta');
     $now = new DateTime('now', $tz);
@@ -142,56 +132,47 @@ function time_elapsed($datetime) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="dashboard-page">
     
-    <?php include 'pages/partials/navbar.php'; ?>
+    <?php include __DIR__ . '/student-navbar.php'; ?>
 
-    <!-- Main Content -->
     <div class="dash-container">
         <main class="dash-main">
-            <!-- Success Message -->
             <?php if ($successMsg): ?>
             <div class="alert alert-success">
                 <i class="bi bi-check-circle"></i> <?php echo $successMsg; ?>
             </div>
             <?php endif; ?>
 
-            <!-- Welcome Hero -->
             <section class="dash-hero">
                 <div class="dash-hero-content">
                     <h1>Lagi Kesulitan?</h1>
                     <p>Tulis pertanyaan lo dan tunggu mentor atau mahasiswa lain bantu jawabnya.</p>
-                    <a href="<?php echo BASE_PATH; ?>/forum/create" class="btn btn-light">
+                    <a href="<?php echo BASE_PATH; ?>/student-forum-create.php" class="btn btn-light">
                         <i class="bi bi-pencil-square"></i>
                         Tanya Sekarang
                     </a>
                 </div>
                 <div class="dash-hero-stats">
                     <div class="dash-stat-card">
-                        <div class="dash-stat-icon blue">
-                            <i class="bi bi-chat-heart"></i>
-                        </div>
+                        <div class="dash-stat-icon blue"><i class="bi bi-chat-heart"></i></div>
                         <div class="dash-stat-info">
                             <span class="dash-stat-value"><?php echo $totalReplies; ?></span>
                             <span class="dash-stat-label">Jawaban yang lo bantu</span>
                         </div>
                     </div>
                     <div class="dash-stat-card">
-                        <div class="dash-stat-icon purple">
-                            <i class="bi bi-gem"></i>
-                        </div>
+                        <div class="dash-stat-icon purple"><i class="bi bi-gem"></i></div>
                         <div class="dash-stat-info">
                             <span class="dash-stat-value"><?php echo $totalGemsEarned; ?></span>
                             <span class="dash-stat-label">Gem yang lo dapet</span>
                         </div>
                     </div>
                     <div class="dash-stat-card">
-                        <div class="dash-stat-icon green">
-                            <i class="bi bi-clock-history"></i>
-                        </div>
+                        <div class="dash-stat-icon green"><i class="bi bi-clock-history"></i></div>
                         <div class="dash-stat-info">
                             <span class="dash-stat-value"><?php echo $activeTimeFormatted; ?></span>
                             <span class="dash-stat-label">Waktu aktif</span>
@@ -200,14 +181,12 @@ function time_elapsed($datetime) {
                 </div>
             </section>
 
-            <!-- Pertanyaan yang Lo Ajukan -->
             <?php if (!empty($myQuestions)): ?>
             <section class="dash-questions">
                 <div class="dash-section-header">
                     <h2>Pertanyaan yang Lo Ajukan</h2>
-                    <a href="<?php echo BASE_PATH; ?>/forum?filter=my" class="btn btn-text">Lihat Semua</a>
+                    <a href="<?php echo BASE_PATH; ?>/student-forum.php?filter=my" class="btn btn-text">Lihat Semua</a>
                 </div>
-
                 <div class="dash-questions-list">
                     <?php foreach ($myQuestions as $q): ?>
                         <article class="dash-question-card my-question <?php echo $q['is_solved'] ? 'solved' : ''; ?>">
@@ -225,13 +204,13 @@ function time_elapsed($datetime) {
                                     <?php endif; ?>
                                 </div>
                             </div>
-                            <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="dash-question-title-link">
+                            <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $q['id']; ?>" class="dash-question-title-link">
                                 <h3 class="dash-question-title"><?php echo htmlspecialchars($q['title']); ?></h3>
                             </a>
                             <p class="dash-question-excerpt"><?php echo htmlspecialchars(substr($q['content'], 0, 150)) . '...'; ?></p>
                             <div class="dash-question-footer">
                                 <div class="dash-question-author"></div>
-                                <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="btn btn-outline btn-sm">
+                                <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $q['id']; ?>" class="btn btn-outline btn-sm">
                                     <?php echo $q['reply_count'] > 0 ? 'Lihat Jawaban' : 'Lihat Detail'; ?>
                                 </a>
                             </div>
@@ -242,26 +221,21 @@ function time_elapsed($datetime) {
             <?php endif; ?>
         </main>
 
-        <!-- Sidebar -->
         <aside class="dash-sidebar">
             <div class="dash-sidebar-card">
                 <h3>Menu Cepat</h3>
                 <div class="dash-quick-menu">
-                    <a href="<?php echo BASE_PATH; ?>/forum" class="dash-quick-item">
-                        <i class="bi bi-chat-square-text"></i>
-                        <span>Forum Diskusi</span>
+                    <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="dash-quick-item">
+                        <i class="bi bi-chat-square-text"></i><span>Forum Diskusi</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/mentor" class="dash-quick-item">
-                        <i class="bi bi-person-video3"></i>
-                        <span>Cari Mentor</span>
+                    <a href="<?php echo BASE_PATH; ?>/student-mentor.php" class="dash-quick-item">
+                        <i class="bi bi-person-video3"></i><span>Cari Mentor</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/topup" class="dash-quick-item">
-                        <i class="bi bi-gem"></i>
-                        <span>Top Up Gem</span>
+                    <a href="<?php echo BASE_PATH; ?>/student-topup.php" class="dash-quick-item">
+                        <i class="bi bi-gem"></i><span>Top Up Gem</span>
                     </a>
-                    <a href="<?php echo BASE_PATH; ?>/chat-history" class="dash-quick-item">
-                        <i class="bi bi-chat-left-text"></i>
-                        <span>Histori Chat</span>
+                    <a href="<?php echo BASE_PATH; ?>/student-chat-history.php" class="dash-quick-item">
+                        <i class="bi bi-chat-left-text"></i><span>Histori Chat</span>
                     </a>
                 </div>
             </div>
@@ -283,9 +257,7 @@ function time_elapsed($datetime) {
                                 <span class="name"><?php echo $mentor['name']; ?></span>
                                 <span class="expertise"><?php echo $mentor['expertise']; ?></span>
                             </div>
-                            <div class="dash-mentor-rating">
-                                <i class="bi bi-star-fill"></i> <?php echo $mentor['rating']; ?>
-                            </div>
+                            <div class="dash-mentor-rating"><i class="bi bi-star-fill"></i> <?php echo $mentor['rating']; ?></div>
                         </div>
                         <?php endforeach; ?>
                     <?php else: ?>
@@ -302,34 +274,30 @@ function time_elapsed($datetime) {
                                 <span class="name"><?php echo htmlspecialchars($mentor['name']); ?></span>
                                 <span class="expertise"><?php echo htmlspecialchars($mentor['expertise']); ?></span>
                             </div>
-                            <div class="dash-mentor-rating">
-                                <i class="bi bi-star-fill"></i> <?php echo number_format($mentor['rating'], 1); ?>
-                            </div>
+                            <div class="dash-mentor-rating"><i class="bi bi-star-fill"></i> <?php echo number_format($mentor['rating'], 1); ?></div>
                         </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
-                <a href="<?php echo BASE_PATH; ?>/mentor" class="btn btn-outline btn-full btn-sm">Lihat Semua Mentor</a>
+                <a href="<?php echo BASE_PATH; ?>/student-mentor.php" class="btn btn-outline btn-full btn-sm">Lihat Semua Mentor</a>
             </div>
         </aside>
     </div>
 
-    <!-- Pertanyaan dari Mahasiswa Lain - FULL WIDTH (di luar grid) -->
     <?php if (!empty($myQuestions)): ?>
     <div class="dash-full-section">
         <section class="dash-questions">
             <div class="dash-section-header">
                 <h2>Pertanyaan dari Mahasiswa Lain</h2>
-                <a href="<?php echo BASE_PATH; ?>/forum" class="btn btn-text">Lihat Semua</a>
+                <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="btn btn-text">Lihat Semua</a>
             </div>
-
             <div class="dash-questions-list grid-three">
                 <?php if (empty($recentQuestions)): ?>
                     <div class="dash-empty-state">
                         <i class="bi bi-chat-square-text"></i>
                         <h3>Belum Ada Pertanyaan</h3>
-                        <p>Belum ada pertanyaan dari mahasiswa lain. Cek lagi nanti!</p>
-                        <a href="<?php echo BASE_PATH; ?>/forum" class="btn btn-primary">Lihat Forum</a>
+                        <p>Belum ada pertanyaan dari mahasiswa lain.</p>
+                        <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="btn btn-primary">Lihat Forum</a>
                     </div>
                 <?php else: ?>
                     <?php foreach ($recentQuestions as $q): ?>
@@ -338,7 +306,6 @@ function time_elapsed($datetime) {
                                 <div class="dash-question-meta">
                                     <span class="category"><i class="bi bi-folder"></i> <?php echo htmlspecialchars($q['category_name']); ?></span>
                                     <span class="time"><i class="bi bi-clock"></i> <?php echo time_elapsed($q['created_at']); ?></span>
-                                    <span class="replies"><i class="bi bi-chat-dots"></i> <?php echo $q['reply_count']; ?> jawaban</span>
                                 </div>
                                 <div class="dash-question-reward">
                                     <?php if ($q['is_solved']): ?>
@@ -347,7 +314,7 @@ function time_elapsed($datetime) {
                                     <span class="gem-reward">+<?php echo $q['gem_reward']; ?> gem</span>
                                 </div>
                             </div>
-                            <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="dash-question-title-link">
+                            <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $q['id']; ?>" class="dash-question-title-link">
                                 <h3 class="dash-question-title"><?php echo htmlspecialchars($q['title']); ?></h3>
                             </a>
                             <p class="dash-question-excerpt"><?php echo htmlspecialchars(substr($q['content'], 0, 80)) . '...'; ?></p>
@@ -362,7 +329,7 @@ function time_elapsed($datetime) {
                                     </div>
                                     <span><?php echo htmlspecialchars($q['author_name']); ?></span>
                                 </div>
-                                <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="btn btn-outline btn-sm">
+                                <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $q['id']; ?>" class="btn btn-outline btn-sm">
                                     <?php echo $q['is_solved'] ? 'Lihat Jawaban' : 'Jawab'; ?>
                                 </a>
                             </div>
@@ -372,70 +339,9 @@ function time_elapsed($datetime) {
             </div>
         </section>
     </div>
-    <?php else: ?>
-    <!-- Jika tidak ada myQuestions, tampilkan di dalam container biasa -->
-    <div class="dash-container">
-        <main class="dash-main" style="grid-column: 1 / -1;">
-            <section class="dash-questions">
-                <div class="dash-section-header">
-                    <h2>Pertanyaan dari Mahasiswa Lain</h2>
-                    <a href="<?php echo BASE_PATH; ?>/forum" class="btn btn-text">Lihat Semua</a>
-                </div>
-
-                <div class="dash-questions-list">
-                    <?php if (empty($recentQuestions)): ?>
-                        <div class="dash-empty-state">
-                            <i class="bi bi-chat-square-text"></i>
-                            <h3>Belum Ada Pertanyaan</h3>
-                            <p>Belum ada pertanyaan dari mahasiswa lain. Cek lagi nanti!</p>
-                            <a href="<?php echo BASE_PATH; ?>/forum" class="btn btn-primary">Lihat Forum</a>
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($recentQuestions as $q): ?>
-                            <article class="dash-question-card <?php echo $q['is_solved'] ? 'solved' : ''; ?>">
-                                <div class="dash-question-header">
-                                    <div class="dash-question-meta">
-                                        <span class="category"><i class="bi bi-folder"></i> <?php echo htmlspecialchars($q['category_name']); ?></span>
-                                        <span class="time"><i class="bi bi-clock"></i> <?php echo time_elapsed($q['created_at']); ?></span>
-                                        <span class="replies"><i class="bi bi-chat-dots"></i> <?php echo $q['reply_count']; ?> jawaban</span>
-                                    </div>
-                                    <div class="dash-question-reward">
-                                        <?php if ($q['is_solved']): ?>
-                                            <span class="badge-solved"><i class="bi bi-check-circle-fill"></i> Terjawab</span>
-                                        <?php endif; ?>
-                                        <span class="gem-reward">+<?php echo $q['gem_reward']; ?> gem</span>
-                                    </div>
-                                </div>
-                                <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="dash-question-title-link">
-                                    <h3 class="dash-question-title"><?php echo htmlspecialchars($q['title']); ?></h3>
-                                </a>
-                                <p class="dash-question-excerpt"><?php echo htmlspecialchars(substr($q['content'], 0, 150)) . '...'; ?></p>
-                                <div class="dash-question-footer">
-                                    <div class="dash-question-author">
-                                        <div class="author-avatar">
-                                            <?php if (!empty($q['author_avatar'])): ?>
-                                                <img src="<?php echo BASE_PATH . '/' . htmlspecialchars($q['author_avatar']); ?>" alt="Avatar">
-                                            <?php else: ?>
-                                                <?php echo strtoupper(substr($q['author_name'], 0, 1)); ?>
-                                            <?php endif; ?>
-                                        </div>
-                                        <span><?php echo htmlspecialchars($q['author_name']); ?></span>
-                                    </div>
-                                    <a href="<?php echo BASE_PATH; ?>/forum/thread/<?php echo $q['id']; ?>" class="btn btn-outline btn-sm">
-                                        <?php echo $q['is_solved'] ? 'Lihat Jawaban' : 'Jawab'; ?>
-                                    </a>
-                                </div>
-                            </article>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </div>
-            </section>
-        </main>
-    </div>
     <?php endif; ?>
 
     <script>
-    // Auto-hide success alert
     const successAlert = document.querySelector('.alert-success');
     if (successAlert) {
         setTimeout(() => {

@@ -1,5 +1,5 @@
 <?php
-// models/ModelDiskusi.php
+// ModelDiskusi.php
 
 class Diskusi {
     private $conn;
@@ -150,7 +150,7 @@ class Diskusi {
         if ($stmt->execute() && $stmt->rowCount() > 0) {
             // Hapus file gambar jika ada
             if ($diskusi && $diskusi['image_path']) {
-                $filePath = __DIR__ . '/../' . $diskusi['image_path'];
+                $filePath = __DIR__ . '/' . $diskusi['image_path'];
                 if (file_exists($filePath)) {
                     unlink($filePath);
                 }

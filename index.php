@@ -8,7 +8,7 @@ require_once __DIR__ . '/config.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JagoNugas Kelompok 2</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body>
@@ -25,8 +25,8 @@ require_once __DIR__ . '/config.php';
                 <a href="#testimonials">Testimoni</a>
             </div>
             <div class="nav-buttons">
-                <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-text">Login</a>
-                <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary">Register</a>
+                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-text">Login</a>
+                <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary">Register</a>
             </div>
         </div>
     </nav>
@@ -45,12 +45,11 @@ require_once __DIR__ . '/config.php';
                     Konsultasi langsung dengan mentor berpengalaman, harga terjangkau, hasil terbukti.
                 </p>
                 <div class="hero-cta">
-    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-hero-cta">
-        <span>Mulai Gratis</span>
-        <i class="bi bi-arrow-right"></i>
-    </a>
-</div>
-
+                    <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-hero-cta">
+                        <span>Mulai Gratis</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
             </div>
 
             <!-- Kanan: logo besar -->
@@ -184,7 +183,7 @@ require_once __DIR__ . '/config.php';
                         <li><i class="bi bi-check-lg"></i> Chat dengan Mentor</li>
                         <li><i class="bi bi-check-lg"></i> Upload File (JPG/PDF)</li>
                     </ul>
-                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
+                    <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-outline btn-full">Pilih Paket</a>
                 </div>
                 <div class="pricing-card featured">
                     <div class="popular-badge">⭐ Paling Populer</div>
@@ -199,7 +198,7 @@ require_once __DIR__ . '/config.php';
                         <li><i class="bi bi-check-lg"></i> Priority Support</li>
                         <li><i class="bi bi-check-lg"></i> Bonus 500 Gem</li>
                     </ul>
-                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-full">Pilih Paket</a>
+                    <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary btn-full">Pilih Paket</a>
                 </div>
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -213,7 +212,7 @@ require_once __DIR__ . '/config.php';
                         <li><i class="bi bi-check-lg"></i> Dedicated Support</li>
                         <li><i class="bi bi-check-lg"></i> Bonus 2,000 Gem</li>
                     </ul>
-                    <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-outline btn-full">Pilih Paket</a>
+                    <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-outline btn-full">Pilih Paket</a>
                 </div>
             </div>
         </div>
@@ -304,7 +303,7 @@ require_once __DIR__ . '/config.php';
                         <h4>Produk</h4>
                         <a href="#features">Fitur</a>
                         <a href="#pricing">Harga</a>
-                        <a href="<?php echo BASE_PATH; ?>/mentor/register">Jadi Mentor</a>
+                        <a href="<?php echo BASE_PATH; ?>/mentor-register.php">Jadi Mentor</a>
                     </div>
                     <div class="footer-column">
                         <h4>Lainnya</h4>

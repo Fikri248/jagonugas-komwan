@@ -10,14 +10,8 @@ if (isset($_SESSION['user_id'])) {
     $currentUser = $stmt->fetch();
     $userGems = $currentUser['gems'] ?? 0;
     
-    // Get notifications
     try {
-        $stmt = $pdo->prepare("
-            SELECT * FROM notifications 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC 
-            LIMIT 10
-        ");
+        $stmt = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
         $stmt->execute([$_SESSION['user_id']]);
         $notifications = $stmt->fetchAll();
         
@@ -49,12 +43,12 @@ if (!function_exists('notif_time_ago')) {
 <header class="dash-topbar">
     <div class="dash-topbar-inner">
         <div class="dash-topbar-left">
-            <a href="<?php echo BASE_PATH; ?>/dashboard" class="dash-logo">
+            <a href="<?php echo BASE_PATH; ?>/student-dashboard.php" class="dash-logo">
                 <span>JagoNugas</span>
             </a>
         </div>
 
-        <form class="dash-search" action="<?php echo BASE_PATH; ?>/forum" method="GET">
+        <form class="dash-search" action="<?php echo BASE_PATH; ?>/student-forum.php" method="GET">
             <i class="bi bi-search"></i>
             <input type="text" name="search" placeholder="Cari jawaban untuk pertanyaan apa aja..." />
         </form>
@@ -66,11 +60,10 @@ if (!function_exists('notif_time_ago')) {
             </div>
 
             <nav class="dash-nav-links">
-                <a href="<?php echo BASE_PATH; ?>/mentor">Mentor</a>
-                <a href="<?php echo BASE_PATH; ?>/membership">Membership</a>
+                <a href="<?php echo BASE_PATH; ?>/student-mentor.php">Mentor</a>
+                <a href="<?php echo BASE_PATH; ?>/student-membership.php">Membership</a>
             </nav>
 
-            <!-- Notification Dropdown -->
             <?php if ($currentUser): ?>
             <div class="dash-notif-dropdown" id="notifDropdown">
                 <button type="button" class="dash-notif-trigger" id="notifTrigger">
@@ -115,7 +108,7 @@ if (!function_exists('notif_time_ago')) {
                 </div>
             </div>
             <?php else: ?>
-            <button type="button" class="dash-notif-trigger" onclick="window.location.href='<?php echo BASE_PATH; ?>/login'">
+            <button type="button" class="dash-notif-trigger" onclick="window.location.href='<?php echo BASE_PATH; ?>/login.php'">
                 <i class="bi bi-bell"></i>
             </button>
             <?php endif; ?>
@@ -145,16 +138,16 @@ if (!function_exists('notif_time_ago')) {
                     <i class="bi bi-chevron-down"></i>
                 </div>
                 <div class="dash-dropdown-menu">
-                    <a href="<?php echo BASE_PATH; ?>/chat-history"><i class="bi bi-chat-left-text"></i> Histori Chat</a>
-                    <a href="<?php echo BASE_PATH; ?>/settings"><i class="bi bi-gear"></i> Pengaturan Akun</a>
+                    <a href="<?php echo BASE_PATH; ?>/student-chat-history.php"><i class="bi bi-chat-left-text"></i> Histori Chat</a>
+                    <a href="<?php echo BASE_PATH; ?>/student-settings.php"><i class="bi bi-gear"></i> Pengaturan Akun</a>
                     <div class="dropdown-divider"></div>
-                    <a href="<?php echo BASE_PATH; ?>/logout" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                    <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                 </div>
             </div>
             <?php else: ?>
             <div class="dash-auth-buttons">
-                <a href="<?php echo BASE_PATH; ?>/login" class="btn btn-outline btn-sm">Login</a>
-                <a href="<?php echo BASE_PATH; ?>/register" class="btn btn-primary btn-sm">Daftar</a>
+                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-outline btn-sm">Login</a>
+                <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary btn-sm">Daftar</a>
             </div>
             <?php endif; ?>
         </div>
@@ -168,7 +161,6 @@ if (!function_exists('notif_time_ago')) {
     const userTrigger = document.getElementById('userTrigger');
     const userDropdown = document.getElementById('userDropdown');
     
-    // Notification toggle
     notifTrigger?.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -176,7 +168,6 @@ if (!function_exists('notif_time_ago')) {
         userDropdown?.classList.remove('active');
     });
     
-    // User dropdown toggle
     userTrigger?.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -184,17 +175,15 @@ if (!function_exists('notif_time_ago')) {
         notifDropdown?.classList.remove('active');
     });
     
-    // Close on outside click
     document.addEventListener('click', function(e) {
         if (!e.target.closest('#notifDropdown')) notifDropdown?.classList.remove('active');
         if (!e.target.closest('#userDropdown')) userDropdown?.classList.remove('active');
     });
     
-    // Mark all read
     document.getElementById('markAllRead')?.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        fetch('<?php echo BASE_PATH; ?>/api/notifications/read-all.php', {
+        fetch('<?php echo BASE_PATH; ?>/api-notif-read-all.php', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'}
         }).then(() => {
@@ -207,13 +196,12 @@ if (!function_exists('notif_time_ago')) {
         });
     });
     
-    // Click notif item - mark as read only, no redirect
     document.querySelectorAll('.notif-item').forEach(item => {
         item.addEventListener('click', function(e) {
             e.stopPropagation();
             const id = this.dataset.notifId;
             if (id && this.classList.contains('unread')) {
-                fetch('<?php echo BASE_PATH; ?>/api/notifications/read.php', {
+                fetch('<?php echo BASE_PATH; ?>/api-notif-read.php', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({id: id})

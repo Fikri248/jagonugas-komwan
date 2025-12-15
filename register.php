@@ -1,8 +1,7 @@
 <?php
-// pages/register.php
-require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../ModelUser.php';
-require_once __DIR__ . '/../includes/NotificationHelper.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ModelUser.php';
+require_once __DIR__ . '/NotificationHelper.php';
 
 $error = '';
 $success = '';
@@ -82,13 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daftar - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/assets/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="auth-page">
     <div class="auth-card">
         <!-- Tombol Kembali -->
-        <a href="<?php echo BASE_PATH; ?>/" class="auth-back-btn">
+        <a href="<?php echo BASE_PATH; ?>/index.php" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -197,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <p class="auth-footer-text">
-            Sudah punya akun? <a href="<?php echo BASE_PATH; ?>/login">Login di sini</a>
+            Sudah punya akun? <a href="<?php echo BASE_PATH; ?>/login.php">Login di sini</a>
         </p>
     </div>
 
