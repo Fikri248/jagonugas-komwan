@@ -7,7 +7,7 @@ $name = $_SESSION['name'] ?? '';
 
 /**
  * Helper buat bikin URL aman berbasis BASE_PATH.
- * Pakai clean route (tanpa .php) karena kamu sudah punya router app.php.
+ * Update: Sekarang pake .php extension untuk Azure compatibility
  */
 function url_path(string $path = ''): string {
     $path = '/' . ltrim($path, '/');
@@ -15,9 +15,9 @@ function url_path(string $path = ''): string {
 }
 
 // Nav primary (kalau login, arahkan ke dashboard sesuai role)
-$dashboardUrl = url_path('dashboard');
-if ($role === 'admin') $dashboardUrl = url_path('admin/dashboard');
-if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
+$dashboardUrl = url_path('student-dashboard.php');
+if ($role === 'admin') $dashboardUrl = url_path('admin-dashboard.php');
+if ($role === 'mentor') $dashboardUrl = url_path('mentor-dashboard.php');
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -34,7 +34,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
     <nav class="navbar">
         <div class="container">
             <div class="logo">
-                <a href="<?php echo htmlspecialchars(url_path('')); ?>" style="text-decoration:none;">
+                <a href="<?php echo htmlspecialchars(url_path('index.php')); ?>" style="text-decoration:none;">
                     <h1>JagoNugas</h1>
                 </a>
             </div>
@@ -51,10 +51,10 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                     <a href="<?php echo htmlspecialchars($dashboardUrl); ?>" class="btn btn-text">
                         Dashboard<?php echo $name ? ' (' . htmlspecialchars($name) . ')' : ''; ?>
                     </a>
-                    <a href="<?php echo htmlspecialchars(url_path('logout')); ?>" class="btn btn-primary">Logout</a>
+                    <a href="<?php echo htmlspecialchars(url_path('logout.php')); ?>" class="btn btn-primary">Logout</a>
                 <?php else: ?>
-                    <a href="<?php echo htmlspecialchars(url_path('login')); ?>" class="btn btn-text">Login</a>
-                    <a href="<?php echo htmlspecialchars(url_path('register')); ?>" class="btn btn-primary">Register</a>
+                    <a href="<?php echo htmlspecialchars(url_path('login.php')); ?>" class="btn btn-text">Login</a>
+                    <a href="<?php echo htmlspecialchars(url_path('register.php')); ?>" class="btn btn-primary">Register</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -83,7 +83,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                             <i class="bi bi-arrow-right"></i>
                         </a>
                     <?php else: ?>
-                        <a href="<?php echo htmlspecialchars(url_path('register')); ?>" class="btn btn-hero-cta">
+                        <a href="<?php echo htmlspecialchars(url_path('register.php')); ?>" class="btn btn-hero-cta">
                             <span>Mulai Gratis</span>
                             <i class="bi bi-arrow-right"></i>
                         </a>
@@ -231,7 +231,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                         <li><i class="bi bi-check-lg"></i> Chat dengan Mentor</li>
                         <li><i class="bi bi-check-lg"></i> Upload File (JPG/PDF)</li>
                     </ul>
-                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register')); ?>" class="btn btn-outline btn-full">
+                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register.php')); ?>" class="btn btn-outline btn-full">
                         <?php echo $isLoggedIn ? 'Mulai Sekarang' : 'Pilih Paket'; ?>
                     </a>
                 </div>
@@ -249,7 +249,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                         <li><i class="bi bi-check-lg"></i> Priority Support</li>
                         <li><i class="bi bi-check-lg"></i> Bonus 500 Gem</li>
                     </ul>
-                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register')); ?>" class="btn btn-primary btn-full">
+                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register.php')); ?>" class="btn btn-primary btn-full">
                         <?php echo $isLoggedIn ? 'Mulai Sekarang' : 'Pilih Paket'; ?>
                     </a>
                 </div>
@@ -266,7 +266,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                         <li><i class="bi bi-check-lg"></i> Dedicated Support</li>
                         <li><i class="bi bi-check-lg"></i> Bonus 2,000 Gem</li>
                     </ul>
-                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register')); ?>" class="btn btn-outline btn-full">
+                    <a href="<?php echo htmlspecialchars($isLoggedIn ? $dashboardUrl : url_path('register.php')); ?>" class="btn btn-outline btn-full">
                         <?php echo $isLoggedIn ? 'Mulai Sekarang' : 'Pilih Paket'; ?>
                     </a>
                 </div>
@@ -349,7 +349,7 @@ if ($role === 'mentor') $dashboardUrl = url_path('mentor/dashboard');
                         <h4>Produk</h4>
                         <a href="#features">Fitur</a>
                         <a href="#pricing">Harga</a>
-                        <a href="<?php echo htmlspecialchars(url_path('mentor/register')); ?>">Jadi Mentor</a>
+                        <a href="<?php echo htmlspecialchars(url_path('mentor-register.php')); ?>">Jadi Mentor</a>
                     </div>
 
                     <div class="footer-column">
