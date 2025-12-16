@@ -1,18 +1,36 @@
 <?php
+// student-forum-edit.php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
+
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+
+// Session check
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $threadId = (int)($_GET['id'] ?? 0);
 $userId = $_SESSION['user_id'] ?? null;
 
 if (!$userId) {
-    header("Location: " . BASE_PATH . "/login.php?redirect=student-forum-edit.php?id=$threadId");
+    header("Location: " . $BASE . "/login.php?redirect=student-forum-edit.php?id=$threadId");
     exit;
 }
 
 if (!$threadId) {
-    header("Location: " . BASE_PATH . "/student-forum.php");
+    header("Location: " . $BASE . "/student-forum.php");
     exit;
+}
+
+// Database connection
+$pdo = null;
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    die("Database connection failed: " . $e->getMessage());
 }
 
 // Get thread
@@ -21,7 +39,7 @@ $stmt->execute([$threadId]);
 $thread = $stmt->fetch();
 
 if (!$thread || $thread['user_id'] != $userId) {
-    header("Location: " . BASE_PATH . "/student-forum.php");
+    header("Location: " . $BASE . "/student-forum.php");
     exit;
 }
 
@@ -75,14 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         // Jika tidak ada perubahan, redirect tanpa update
         if (!$hasChanges) {
-            header("Location: " . BASE_PATH . "/student-forum-thread.php?id=$threadId");
+            header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId");
             exit;
         }
         
         try {
             $pdo->beginTransaction();
             
-            // Update thread
+            // Update thread - hanya update updated_at jika ada perubahan
             $stmt = $pdo->prepare("UPDATE forum_threads SET title = ?, content = ?, category_id = ?, updated_at = NOW() WHERE id = ?");
             $stmt->execute([$title, $content, $categoryId, $threadId]);
             
@@ -140,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             
             $pdo->commit();
-            header("Location: " . BASE_PATH . "/student-forum-thread.php?id=$threadId&updated=1");
+            header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId&updated=1");
             exit;
             
         } catch (Exception $e) {
@@ -156,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Pertanyaan - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="forum-page">
@@ -165,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="forum-create-container">
         <div class="forum-create-card">
             <div class="forum-create-header">
-                <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>" class="back-link">
+                <a href="<?php echo $BASE; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>" class="back-link">
                     <i class="bi bi-arrow-left"></i> Kembali ke Pertanyaan
                 </a>
                 <h1>Edit Pertanyaan</h1>
@@ -227,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <span class="checkmark"></span>
                             </label>
                             <?php if (strpos($att['file_type'], 'image') !== false): ?>
-                            <img src="<?php echo BASE_PATH . '/' . $att['file_path']; ?>" alt="">
+                            <img src="<?php echo $BASE . '/' . $att['file_path']; ?>" alt="">
                             <?php else: ?>
                             <i class="bi bi-file-earmark"></i>
                             <?php endif; ?>
@@ -260,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Actions -->
                 <div class="form-actions">
-                    <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>" class="btn btn-outline">Batal</a>
+                    <a href="<?php echo $BASE; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>" class="btn btn-outline">Batal</a>
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-lg"></i> Simpan Perubahan
                     </button>

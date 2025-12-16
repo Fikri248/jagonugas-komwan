@@ -1,10 +1,17 @@
 <?php
+// register.php
+declare(strict_types=1);
+
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/ModelUser.php';
 require_once __DIR__ . '/NotificationHelper.php';
 
 $error = '';
 $success = '';
+
+// Kompatibilitas nama konstanta base path
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
 
 // Daftar Program Studi Telkom University Surabaya
 $programStudiList = [
@@ -22,56 +29,77 @@ $programStudiList = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $db = (new Database())->getConnection();
-    $user = new User($db);
+    try {
+        $db = (new Database())->getConnection();
+        $user = new User($db);
 
-    $name = trim($_POST['name'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $confirmPassword = $_POST['confirm_password'] ?? '';
-    $programStudi = trim($_POST['program_studi'] ?? '');
-    $semester = intval($_POST['semester'] ?? 0);
+        $name            = trim((string)($_POST['name'] ?? ''));
+        $email           = trim((string)($_POST['email'] ?? ''));
+        $password        = (string)($_POST['password'] ?? '');
+        $confirmPassword = (string)($_POST['confirm_password'] ?? '');
+        $programStudi    = trim((string)($_POST['program_studi'] ?? ''));
+        $semester        = (int)($_POST['semester'] ?? 0);
 
-    if (empty($name) || empty($email) || empty($password) || empty($programStudi) || $semester < 1) {
-        $error = 'Semua field wajib diisi';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Format email tidak valid';
-    } elseif (strlen($password) < 6) {
-        $error = 'Password minimal 6 karakter';
-    } elseif ($password !== $confirmPassword) {
-        $error = 'Konfirmasi password tidak cocok';
-    } else {
-        $user->name = $name;
-        $user->email = $email;
-        $user->password = $password;
-        $user->program_studi = $programStudi;
-        $user->semester = $semester;
-
-        $result = $user->register();
-
-        if ($result['success']) {
-            $newUserId = $result['user_id'];
-            $bonusGems = $result['gems'] ?? 75;
-            
-            // Kirim notifikasi
-            $notif = new NotificationHelper($db);
-            
-            // 1. Notifikasi Welcome
-            $notif->welcome($newUserId);
-            
-            // 2. Notifikasi Bonus Gem
-            $notif->create(
-                $newUserId,
-                'gem_bonus',
-                'Selamat! Kamu mendapat ' . $bonusGems . ' Gem gratis sebagai hadiah pendaftaran. Gunakan untuk bertanya di forum!',
-                null,
-                null
-            );
-            
-            $success = 'Registrasi berhasil! Kamu mendapat ' . $bonusGems . ' Gem gratis. Silakan login.';
+        if ($name === '' || $email === '' || $password === '' || $programStudi === '' || $semester < 1) {
+            $error = 'Semua field wajib diisi';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Format email tidak valid';
+        } elseif (!in_array($programStudi, $programStudiList, true)) {
+            $error = 'Program studi tidak valid';
+        } elseif ($semester < 1 || $semester > 14) {
+            $error = 'Semester harus antara 1 sampai 14';
+        } elseif (strlen($password) < 6) {
+            $error = 'Password minimal 6 karakter';
+        } elseif ($password !== $confirmPassword) {
+            $error = 'Konfirmasi password tidak cocok';
         } else {
-            $error = $result['message'];
+            $user->name = $name;
+            $user->email = $email;
+            $user->password = $password;
+
+            // Isi dua properti agar kompatibel dengan model/database lama & baru
+            $user->program_studi = $programStudi;
+            $user->programstudi  = $programStudi;
+
+            $user->semester = $semester;
+
+            $result = $user->register();
+
+            if (!empty($result['success'])) {
+                $newUserId = (int)($result['user_id'] ?? 0);
+                $bonusGems = (int)($result['gems'] ?? 75);
+
+                // Kirim notifikasi (dibuat aman, tidak bikin fatal error kalau method belum ada)
+                try {
+                    $notif = new NotificationHelper($db);
+
+                    if (method_exists($notif, 'welcome') && $newUserId > 0) {
+                        $notif->welcome($newUserId);
+                    }
+
+                    if (method_exists($notif, 'create') && $newUserId > 0) {
+                        $notif->create(
+                            $newUserId,
+                            'gem_bonus',
+                            'Selamat! Kamu mendapat ' . $bonusGems . ' Gem gratis sebagai hadiah pendaftaran. Gunakan untuk bertanya di forum!',
+                            null,
+                            null
+                        );
+                    }
+                } catch (Throwable $e) {
+                    // Abaikan error notifikasi supaya registrasi tetap sukses
+                }
+
+                $success = 'Registrasi berhasil! Kamu mendapat ' . $bonusGems . ' Gem gratis. Silakan login.';
+
+                // Optional: kosongkan POST agar form tidak keisi lagi setelah sukses
+                $_POST = [];
+            } else {
+                $error = (string)($result['message'] ?? 'Registrasi gagal, coba lagi');
+            }
         }
+    } catch (Throwable $e) {
+        $error = 'Terjadi kesalahan server. Coba lagi.';
     }
 }
 ?>
@@ -81,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daftar - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($BASE); ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="auth-page">
     <div class="auth-card">
         <!-- Tombol Kembali -->
-        <a href="<?php echo BASE_PATH; ?>/index.php" class="auth-back-btn">
+        <a href="<?php echo htmlspecialchars($BASE); ?>/index.php" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -109,19 +137,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <form method="POST" class="auth-form">
+        <form method="POST" class="auth-form" autocomplete="off">
             <div class="form-group">
                 <label for="name">Nama Lengkap</label>
-                <input type="text" id="name" name="name" class="auth-input" 
-                       value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" 
-                       placeholder="Masukkan nama lengkap" required>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    class="auth-input"
+                    value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>"
+                    placeholder="Masukkan nama lengkap"
+                    required
+                >
             </div>
 
             <div class="form-group">
                 <label for="email">Email</label>
-                <input type="email" id="email" name="email" class="auth-input" 
-                       value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" 
-                       placeholder="contoh@student.telkomuniversity.ac.id" required>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    class="auth-input"
+                    value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"
+                    placeholder="contoh@student.telkomuniversity.ac.id"
+                    required
+                >
             </div>
 
             <!-- Program Studi Custom Dropdown -->
@@ -136,16 +176,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <path d="M6 9l6 6 6-6"/>
                         </svg>
                     </div>
+
                     <div class="select-items">
                         <?php foreach ($programStudiList as $prodi): ?>
-                            <div class="select-item <?php echo (($_POST['program_studi'] ?? '') === $prodi) ? 'selected' : ''; ?>" 
-                                 data-value="<?php echo $prodi; ?>">
-                                <span class="item-icon">🎓</span>
-                                <?php echo $prodi; ?>
+                            <div
+                                class="select-item <?php echo (($_POST['program_studi'] ?? '') === $prodi) ? 'selected' : ''; ?>"
+                                data-value="<?php echo htmlspecialchars($prodi); ?>"
+                            >
+                                <i class="bi bi-mortarboard-fill" style="margin-right:8px;"></i>
+                                <?php echo htmlspecialchars($prodi); ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
-                    <input type="hidden" name="program_studi" value="<?php echo htmlspecialchars($_POST['program_studi'] ?? ''); ?>" required>
+
+                    <input
+                        type="hidden"
+                        name="program_studi"
+                        value="<?php echo htmlspecialchars($_POST['program_studi'] ?? ''); ?>"
+                        required
+                    >
                 </div>
             </div>
 
@@ -155,35 +204,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="custom-select" data-name="semester">
                     <div class="select-selected">
                         <span class="select-text <?php echo !empty($_POST['semester']) ? 'has-value' : ''; ?>">
-                            <?php echo !empty($_POST['semester']) ? 'Semester ' . htmlspecialchars($_POST['semester']) : 'Pilih Semester'; ?>
+                            <?php echo !empty($_POST['semester']) ? 'Semester ' . htmlspecialchars((string)$_POST['semester']) : 'Pilih Semester'; ?>
                         </span>
                         <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M6 9l6 6 6-6"/>
                         </svg>
                     </div>
+
                     <div class="select-items">
                         <?php for ($i = 1; $i <= 14; $i++): ?>
-                            <div class="select-item <?php echo (($_POST['semester'] ?? '') == $i) ? 'selected' : ''; ?>" 
-                                 data-value="<?php echo $i; ?>">
-                                <span class="item-icon">📚</span>
+                            <div
+                                class="select-item <?php echo (($_POST['semester'] ?? '') == $i) ? 'selected' : ''; ?>"
+                                data-value="<?php echo $i; ?>"
+                            >
+                                <i class="bi bi-book-fill" style="margin-right:8px;"></i>
                                 Semester <?php echo $i; ?>
                             </div>
                         <?php endfor; ?>
                     </div>
-                    <input type="hidden" name="semester" value="<?php echo htmlspecialchars($_POST['semester'] ?? ''); ?>" required>
+
+                    <input
+                        type="hidden"
+                        name="semester"
+                        value="<?php echo htmlspecialchars((string)($_POST['semester'] ?? '')); ?>"
+                        required
+                    >
                 </div>
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" class="auth-input" 
-                       placeholder="Minimal 6 karakter" required>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    class="auth-input"
+                    placeholder="Minimal 6 karakter"
+                    required
+                >
             </div>
 
             <div class="form-group">
                 <label for="confirm_password">Konfirmasi Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" class="auth-input" 
-                       placeholder="Ulangi password" required>
+                <input
+                    type="password"
+                    id="confirm_password"
+                    name="confirm_password"
+                    class="auth-input"
+                    placeholder="Ulangi password"
+                    required
+                >
             </div>
 
             <!-- Bonus Info -->
@@ -196,20 +266,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <p class="auth-footer-text">
-            Sudah punya akun? <a href="<?php echo BASE_PATH; ?>/login.php">Login di sini</a>
+            Sudah punya akun? <a href="<?php echo htmlspecialchars($BASE); ?>/login.php">Login di sini</a>
         </p>
     </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const customSelects = document.querySelectorAll('.custom-select');
-        
+
         customSelects.forEach(select => {
             const selected = select.querySelector('.select-selected');
-            const items = select.querySelector('.select-items');
             const hiddenInput = select.querySelector('input[type="hidden"]');
             const selectText = select.querySelector('.select-text');
-            
+
             selected.addEventListener('click', function(e) {
                 e.stopPropagation();
                 customSelects.forEach(s => {
@@ -217,35 +286,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 });
                 select.classList.toggle('active');
             });
-            
+
             const selectItems = select.querySelectorAll('.select-item');
             selectItems.forEach(item => {
                 item.addEventListener('click', function() {
                     const value = this.dataset.value;
-                    const text = this.textContent.trim();
+
+                    // Ambil teks tanpa memecah ikon: clone node lalu hapus <i>
+                    const clone = this.cloneNode(true);
+                    const icon = clone.querySelector('i');
+                    if (icon) icon.remove();
+                    const text = clone.textContent.trim();
+
                     hiddenInput.value = value;
                     selectText.textContent = text;
                     selectText.classList.add('has-value');
+
                     selectItems.forEach(i => i.classList.remove('selected'));
                     this.classList.add('selected');
+
                     setTimeout(() => {
                         select.classList.remove('active');
                     }, 150);
                 });
             });
         });
-        
+
         document.addEventListener('click', function() {
-            customSelects.forEach(select => {
-                select.classList.remove('active');
-            });
+            customSelects.forEach(select => select.classList.remove('active'));
         });
-        
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                customSelects.forEach(select => {
-                    select.classList.remove('active');
-                });
+                customSelects.forEach(select => select.classList.remove('active'));
             }
         });
     });

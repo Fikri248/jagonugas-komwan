@@ -1,17 +1,35 @@
 <?php
+// student-forum-create.php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
+
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+
+// Session check
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Harus login
 if (!isset($_SESSION['user_id'])) {
-    header("Location: " . BASE_PATH . "/login.php?redirect=student-forum-create.php");
+    header("Location: " . $BASE . "/login.php?redirect=student-forum-create.php");
     exit;
 }
 
 $userId = $_SESSION['user_id'];
-$name = $_SESSION['name'];
+$name = $_SESSION['name'] ?? 'User';
 $errors = [];
 $success = false;
+
+// Database connection
+$pdo = null;
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
 
 // Get categories
 $categories = $pdo->query("SELECT * FROM forum_categories ORDER BY name")->fetchAll();
@@ -95,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $notif->threadCreated($userId, $threadId, $title);
             
             $pdo->commit();
-            header("Location: " . BASE_PATH . "/student-forum-thread.php?id=$threadId");
+            header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId");
             exit;
             
         } catch (Exception $e) {
@@ -111,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buat Pertanyaan - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="forum-page">
@@ -120,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="forum-create-container">
         <div class="forum-create-card">
             <div class="forum-create-header">
-                <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="back-link">
+                <a href="<?php echo $BASE; ?>/student-forum.php" class="back-link">
                     <i class="bi bi-arrow-left"></i> Kembali ke Forum
                 </a>
                 <h1>Buat Pertanyaan Baru</h1>
@@ -249,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <!-- Actions -->
                 <div class="form-actions">
-                    <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="btn btn-outline">Batal</a>
+                    <a href="<?php echo $BASE; ?>/student-forum.php" class="btn btn-outline">Batal</a>
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-send"></i> Kirim Pertanyaan
                     </button>

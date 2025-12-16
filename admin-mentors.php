@@ -1,56 +1,79 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 
 // Cek login & role admin
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: " . BASE_PATH . "/login.php");
     exit;
 }
 
 $name = $_SESSION['name'] ?? 'Admin';
-$db = (new Database())->getConnection();
+$db = (new Database())->getConnection(); // PDO
 $message = '';
 $messageType = '';
 
-// Handle Approve/Reject
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $mentorId = intval($_POST['mentor_id'] ?? 0);
-    $action = $_POST['action'] ?? '';
-    
-    if ($mentorId > 0) {
-        if ($action === 'approve') {
-            $stmt = $db->prepare("UPDATE users SET is_verified = 1 WHERE id = :id AND role = 'mentor'");
-            $stmt->bindParam(':id', $mentorId);
-            if ($stmt->execute()) {
-                $message = 'Mentor berhasil diverifikasi!';
-                $messageType = 'success';
-            }
-        } elseif ($action === 'reject') {
-            $stmt = $db->prepare("SELECT transkrip_path FROM users WHERE id = :id");
-            $stmt->bindParam(':id', $mentorId);
-            $stmt->execute();
-            $mentor = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($mentor && $mentor['transkrip_path']) {
-                $filePath = __DIR__ . '/' . $mentor['transkrip_path'];
-                if (file_exists($filePath)) {
-                    unlink($filePath);
-                }
-            }
-            
-            $stmt = $db->prepare("DELETE FROM users WHERE id = :id AND role = 'mentor' AND is_verified = 0");
-            $stmt->bindParam(':id', $mentorId);
-            if ($stmt->execute()) {
-                $message = 'Pendaftaran mentor ditolak dan dihapus.';
-                $messageType = 'error';
-            }
-        }
+// Message dari redirect (PRG)
+if (isset($_GET['msg'])) {
+    if ($_GET['msg'] === 'approved') {
+        $message = 'Mentor berhasil diverifikasi!';
+        $messageType = 'success';
+    } elseif ($_GET['msg'] === 'rejected') {
+        $message = 'Pendaftaran mentor ditolak dan dihapus.';
+        $messageType = 'error';
+    } elseif ($_GET['msg'] === 'invalid') {
+        $message = 'Aksi tidak valid.';
+        $messageType = 'error';
     }
 }
 
 // Filter
 $filter = $_GET['filter'] ?? 'pending';
 
+// Handle Approve/Reject (POST -> redirect, biar refresh ga double-submit)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $mentorId = intval($_POST['mentor_id'] ?? 0);
+    $action = $_POST['action'] ?? '';
+
+    if ($mentorId <= 0 || !in_array($action, ['approve', 'reject'], true)) {
+        header("Location: " . BASE_PATH . "/admin-mentors.php?filter=" . urlencode($filter) . "&msg=invalid");
+        exit;
+    }
+
+    if ($action === 'approve') {
+        $stmt = $db->prepare("UPDATE users SET is_verified = 1 WHERE id = :id AND role = 'mentor'");
+        $stmt->bindValue(':id', $mentorId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        header("Location: " . BASE_PATH . "/admin-mentors.php?filter=" . urlencode($filter) . "&msg=approved");
+        exit;
+    }
+
+    if ($action === 'reject') {
+        // Ambil transkrip_path dulu (buat hapus file)
+        $stmt = $db->prepare("SELECT transkrip_path FROM users WHERE id = :id AND role = 'mentor'");
+        $stmt->bindValue(':id', $mentorId, PDO::PARAM_INT);
+        $stmt->execute();
+        $mentor = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($mentor && !empty($mentor['transkrip_path'])) {
+            $filePath = __DIR__ . '/' . ltrim($mentor['transkrip_path'], '/');
+            if (file_exists($filePath)) {
+                @unlink($filePath);
+            }
+        }
+
+        // Hapus user mentor yang masih pending
+        $stmt = $db->prepare("DELETE FROM users WHERE id = :id AND role = 'mentor' AND is_verified = 0");
+        $stmt->bindValue(':id', $mentorId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        header("Location: " . BASE_PATH . "/admin-mentors.php?filter=" . urlencode($filter) . "&msg=rejected");
+        exit;
+    }
+}
+
+// Query list mentors sesuai filter
 if ($filter === 'pending') {
     $query = "SELECT * FROM users WHERE role = 'mentor' AND is_verified = 0 ORDER BY created_at DESC";
 } elseif ($filter === 'verified') {
@@ -63,11 +86,12 @@ $stmt = $db->prepare($query);
 $stmt->execute();
 $mentors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Count tab
 $stmtPending = $db->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 0");
-$pendingCount = $stmtPending->fetchColumn();
+$pendingCount = (int) $stmtPending->fetchColumn();
 
 $stmtVerified = $db->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 1");
-$verifiedCount = $stmtVerified->fetchColumn();
+$verifiedCount = (int) $stmtVerified->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -96,7 +120,7 @@ $verifiedCount = $stmtVerified->fetchColumn();
                     <a href="<?php echo BASE_PATH; ?>/admin-settings.php">Settings</a>
                 </nav>
             </div>
-            
+
             <div class="admin-navbar-right">
                 <div class="admin-user-menu">
                     <div class="admin-avatar"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
@@ -123,7 +147,7 @@ $verifiedCount = $stmtVerified->fetchColumn();
                 <h1><i class="bi bi-mortarboard-fill"></i> Kelola Mentor</h1>
                 <p>Review dan verifikasi pendaftaran mentor baru</p>
             </div>
-            
+
             <!-- Filter Tabs -->
             <div class="admin-filter-tabs">
                 <a href="?filter=pending" class="filter-tab <?php echo $filter === 'pending' ? 'active' : ''; ?>">
@@ -169,31 +193,34 @@ $verifiedCount = $stmtVerified->fetchColumn();
         <?php else: ?>
             <div class="admin-mentor-list">
                 <?php foreach ($mentors as $mentor): ?>
-                    <div class="admin-mentor-card <?php echo $mentor['is_verified'] ? 'verified' : 'pending'; ?>">
+                    <div class="admin-mentor-card <?php echo !empty($mentor['is_verified']) ? 'verified' : 'pending'; ?>">
                         <div class="mentor-card-header">
                             <div class="mentor-avatar-lg">
-                                <?php echo strtoupper(substr($mentor['name'], 0, 1)); ?>
+                                <?php echo strtoupper(substr($mentor['name'] ?? '-', 0, 1)); ?>
                             </div>
                             <div class="mentor-info">
-                                <h3><?php echo htmlspecialchars($mentor['name']); ?></h3>
-                                <p class="mentor-email"><?php echo htmlspecialchars($mentor['email']); ?></p>
+                                <h3><?php echo htmlspecialchars($mentor['name'] ?? '-'); ?></h3>
+                                <p class="mentor-email"><?php echo htmlspecialchars($mentor['email'] ?? '-'); ?></p>
                                 <div class="mentor-meta">
                                     <span class="meta-item">
                                         <i class="bi bi-mortarboard"></i>
-                                        <?php echo htmlspecialchars($mentor['program_studi']); ?>
+                                        <?php echo htmlspecialchars($mentor['program_studi'] ?? '-'); ?>
                                     </span>
                                     <span class="meta-item">
                                         <i class="bi bi-book"></i>
-                                        Semester <?php echo $mentor['semester']; ?>
+                                        Semester <?php echo (int)($mentor['semester'] ?? 0); ?>
                                     </span>
                                     <span class="meta-item">
                                         <i class="bi bi-calendar3"></i>
-                                        <?php echo date('d M Y', strtotime($mentor['created_at'])); ?>
+                                        <?php
+                                            $created = $mentor['created_at'] ?? null;
+                                            echo $created ? date('d M Y', strtotime($created)) : '-';
+                                        ?>
                                     </span>
                                 </div>
                             </div>
                             <div class="mentor-status">
-                                <?php if ($mentor['is_verified']): ?>
+                                <?php if (!empty($mentor['is_verified'])): ?>
                                     <span class="status-badge verified"><i class="bi bi-check-circle-fill"></i> Terverifikasi</span>
                                 <?php else: ?>
                                     <span class="status-badge pending"><i class="bi bi-hourglass-split"></i> Pending</span>
@@ -202,22 +229,23 @@ $verifiedCount = $stmtVerified->fetchColumn();
                         </div>
 
                         <!-- Expertise -->
-                        <?php if ($mentor['expertise']): ?>
+                        <?php if (!empty($mentor['expertise'])): ?>
                             <div class="mentor-expertise">
                                 <strong><i class="bi bi-lightbulb"></i> Keahlian:</strong>
                                 <div class="expertise-tags">
-                                    <?php 
-                                    $expertiseArr = json_decode($mentor['expertise'], true) ?? [];
-                                    foreach ($expertiseArr as $exp): 
+                                    <?php
+                                    $expertiseArr = json_decode($mentor['expertise'], true);
+                                    if (!is_array($expertiseArr)) $expertiseArr = [];
+                                    foreach ($expertiseArr as $exp):
                                     ?>
-                                        <span class="expertise-tag"><?php echo htmlspecialchars($exp); ?></span>
+                                        <span class="expertise-tag"><?php echo htmlspecialchars((string)$exp); ?></span>
                                     <?php endforeach; ?>
                                 </div>
                             </div>
                         <?php endif; ?>
 
                         <!-- Bio -->
-                        <?php if ($mentor['bio']): ?>
+                        <?php if (!empty($mentor['bio'])): ?>
                             <div class="mentor-bio">
                                 <strong><i class="bi bi-person-lines-fill"></i> Bio:</strong>
                                 <p><?php echo htmlspecialchars($mentor['bio']); ?></p>
@@ -225,22 +253,21 @@ $verifiedCount = $stmtVerified->fetchColumn();
                         <?php endif; ?>
 
                         <!-- Transkrip Section -->
-                        <?php if ($mentor['transkrip_path']): ?>
+                        <?php if (!empty($mentor['transkrip_path'])): ?>
                             <div class="transkrip-section">
                                 <strong><i class="bi bi-file-earmark-text"></i> Transkrip Nilai:</strong>
                                 <div class="transkrip-actions">
-                                    <?php 
+                                    <?php
                                     $ext = pathinfo($mentor['transkrip_path'], PATHINFO_EXTENSION);
-                                    $isImage = in_array(strtolower($ext), ['jpg', 'jpeg', 'png']);
+                                    $isImage = in_array(strtolower($ext), ['jpg', 'jpeg', 'png'], true);
                                     ?>
-                                    
-                                    <a href="<?php echo BASE_PATH . '/' . $mentor['transkrip_path']; ?>" 
+                                    <a href="<?php echo BASE_PATH . '/' . ltrim($mentor['transkrip_path'], '/'); ?>"
                                        target="_blank" class="btn-transkrip view">
                                         <i class="bi bi-eye"></i>
                                         Lihat
                                     </a>
-                                    
-                                    <a href="<?php echo BASE_PATH . '/' . $mentor['transkrip_path']; ?>" 
+
+                                    <a href="<?php echo BASE_PATH . '/' . ltrim($mentor['transkrip_path'], '/'); ?>"
                                        download class="btn-transkrip download">
                                         <i class="bi bi-download"></i>
                                         Download
@@ -249,8 +276,8 @@ $verifiedCount = $stmtVerified->fetchColumn();
 
                                 <?php if ($isImage): ?>
                                     <div class="transkrip-preview">
-                                        <img src="<?php echo BASE_PATH . '/' . $mentor['transkrip_path']; ?>" 
-                                             alt="Transkrip <?php echo htmlspecialchars($mentor['name']); ?>"
+                                        <img src="<?php echo BASE_PATH . '/' . ltrim($mentor['transkrip_path'], '/'); ?>"
+                                             alt="Transkrip <?php echo htmlspecialchars($mentor['name'] ?? ''); ?>"
                                              onclick="openImageModal(this.src)">
                                         <p class="preview-hint"><i class="bi bi-zoom-in"></i> Klik gambar untuk memperbesar</p>
                                     </div>
@@ -259,16 +286,16 @@ $verifiedCount = $stmtVerified->fetchColumn();
                         <?php endif; ?>
 
                         <!-- Action Buttons -->
-                        <?php if (!$mentor['is_verified']): ?>
+                        <?php if (empty($mentor['is_verified'])): ?>
                             <div class="mentor-card-actions">
-                                <button type="button" class="btn-action approve" 
-                                        onclick="showConfirmModal('approve', <?php echo $mentor['id']; ?>, '<?php echo htmlspecialchars($mentor['name'], ENT_QUOTES); ?>')">
+                                <button type="button" class="btn-action approve"
+                                        onclick="showConfirmModal('approve', <?php echo (int)$mentor['id']; ?>, '<?php echo htmlspecialchars($mentor['name'] ?? '', ENT_QUOTES); ?>')">
                                     <i class="bi bi-check-lg"></i>
                                     Setujui Mentor
                                 </button>
-                                
+
                                 <button type="button" class="btn-action reject"
-                                        onclick="showConfirmModal('reject', <?php echo $mentor['id']; ?>, '<?php echo htmlspecialchars($mentor['name'], ENT_QUOTES); ?>')">
+                                        onclick="showConfirmModal('reject', <?php echo (int)$mentor['id']; ?>, '<?php echo htmlspecialchars($mentor['name'] ?? '', ENT_QUOTES); ?>')">
                                     <i class="bi bi-x-lg"></i>
                                     Tolak
                                 </button>
@@ -294,11 +321,11 @@ $verifiedCount = $stmtVerified->fetchColumn();
             <div class="confirm-modal-icon" id="confirmIcon"></div>
             <h3 class="confirm-modal-title" id="confirmTitle">Konfirmasi</h3>
             <p class="confirm-modal-message" id="confirmMessage">Apakah Anda yakin?</p>
-            
+
             <form method="POST" id="confirmForm">
                 <input type="hidden" name="mentor_id" id="confirmMentorId">
                 <input type="hidden" name="action" id="confirmAction">
-                
+
                 <div class="confirm-modal-actions">
                     <button type="button" class="btn-modal cancel" onclick="closeConfirmModal()">
                         Batal
@@ -329,10 +356,10 @@ $verifiedCount = $stmtVerified->fetchColumn();
         const title = document.getElementById('confirmTitle');
         const message = document.getElementById('confirmMessage');
         const confirmBtn = document.getElementById('confirmButton');
-        
+
         document.getElementById('confirmMentorId').value = mentorId;
         document.getElementById('confirmAction').value = action;
-        
+
         if (action === 'approve') {
             icon.innerHTML = '<i class="bi bi-check-circle" style="color: #10b981; font-size: 3rem;"></i>';
             title.textContent = 'Setujui Mentor?';
@@ -346,7 +373,7 @@ $verifiedCount = $stmtVerified->fetchColumn();
             confirmBtn.textContent = 'Ya, Tolak';
             confirmBtn.className = 'btn-modal confirm reject';
         }
-        
+
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
     }

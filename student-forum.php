@@ -1,8 +1,26 @@
 <?php
+// student-forum.php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+
+// Session check
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $userId = $_SESSION['user_id'] ?? null;
 $name = $_SESSION['name'] ?? 'Guest';
+
+// Database connection
+$pdo = null;
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
 
 // Filter
 $categorySlug = $_GET['category'] ?? null;
@@ -115,7 +133,7 @@ if (isset($_GET['deleted'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Forum Diskusi <?php echo $currentCategory ? '- ' . $currentCategory['name'] : ''; ?> - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="forum-page">
@@ -128,14 +146,14 @@ if (isset($_GET['deleted'])) {
                 <h3>Kategori</h3>
                 <ul class="forum-category-list">
                     <li>
-                        <a href="<?php echo BASE_PATH; ?>/student-forum.php" class="<?php echo !$categorySlug ? 'active' : ''; ?>">
+                        <a href="<?php echo $BASE; ?>/student-forum.php" class="<?php echo !$categorySlug ? 'active' : ''; ?>">
                             <i class="bi bi-grid"></i>
                             <span>Semua Kategori</span>
                         </a>
                     </li>
                     <?php foreach ($categories as $cat): ?>
                     <li>
-                        <a href="<?php echo BASE_PATH; ?>/student-forum.php?category=<?php echo $cat['slug']; ?>" 
+                        <a href="<?php echo $BASE; ?>/student-forum.php?category=<?php echo $cat['slug']; ?>" 
                            class="<?php echo $categorySlug === $cat['slug'] ? 'active' : ''; ?>">
                             <i class="bi <?php echo $cat['icon']; ?>"></i>
                             <span><?php echo htmlspecialchars($cat['name']); ?></span>
@@ -146,11 +164,11 @@ if (isset($_GET['deleted'])) {
             </div>
 
             <?php if ($userId): ?>
-            <a href="<?php echo BASE_PATH; ?>/student-forum-create.php" class="btn btn-primary btn-full">
+            <a href="<?php echo $BASE; ?>/student-forum-create.php" class="btn btn-primary btn-full">
                 <i class="bi bi-plus-lg"></i> Buat Pertanyaan
             </a>
             <?php else: ?>
-            <a href="<?php echo BASE_PATH; ?>/login.php?redirect=student-forum-create.php" class="btn btn-primary btn-full">
+            <a href="<?php echo $BASE; ?>/login.php?redirect=student-forum-create.php" class="btn btn-primary btn-full">
                 <i class="bi bi-plus-lg"></i> Buat Pertanyaan
             </a>
             <?php endif; ?>
@@ -192,7 +210,7 @@ if (isset($_GET['deleted'])) {
                     </p>
                 </div>
                 <div class="forum-header-right">
-                    <form class="forum-search" method="GET" action="<?php echo BASE_PATH; ?>/student-forum.php">
+                    <form class="forum-search" method="GET" action="<?php echo $BASE; ?>/student-forum.php">
                         <?php if ($categorySlug): ?>
                         <input type="hidden" name="category" value="<?php echo htmlspecialchars($categorySlug); ?>">
                         <?php endif; ?>
@@ -236,7 +254,7 @@ if (isset($_GET['deleted'])) {
                         <h3>Belum Ada Pertanyaan</h3>
                         <p>Jadi yang pertama bertanya!</p>
                         <?php if ($userId): ?>
-                        <a href="<?php echo BASE_PATH; ?>/student-forum-create.php" class="btn btn-primary">Buat Pertanyaan</a>
+                        <a href="<?php echo $BASE; ?>/student-forum-create.php" class="btn btn-primary">Buat Pertanyaan</a>
                         <?php endif; ?>
                     </div>
                 <?php else: ?>
@@ -263,7 +281,7 @@ if (isset($_GET['deleted'])) {
                             </div>
                             
                             <h3 class="forum-thread-title">
-                                <a href="<?php echo BASE_PATH; ?>/student-forum-thread.php?id=<?php echo $thread['id']; ?>">
+                                <a href="<?php echo $BASE; ?>/student-forum-thread.php?id=<?php echo $thread['id']; ?>">
                                     <?php echo htmlspecialchars($thread['title']); ?>
                                 </a>
                             </h3>
@@ -276,7 +294,7 @@ if (isset($_GET['deleted'])) {
                                 <div class="forum-thread-author">
                                     <div class="forum-avatar sm">
                                         <?php if (!empty($thread['author_avatar'])): ?>
-                                            <img src="<?php echo BASE_PATH . '/' . htmlspecialchars($thread['author_avatar']); ?>" alt="Avatar">
+                                            <img src="<?php echo $BASE . '/' . htmlspecialchars($thread['author_avatar']); ?>" alt="Avatar">
                                         <?php else: ?>
                                             <?php echo strtoupper(substr($thread['author_name'], 0, 1)); ?>
                                         <?php endif; ?>

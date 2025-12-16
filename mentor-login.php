@@ -1,60 +1,128 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/ModelUser.php';
 
-// Redirect jika sudah login sebagai mentor
+// Pastikan session aktif
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+/**
+ * Helper URL: pakai BASE_PATH (config baru), fallback ke BASEPATH (config lama).
+ */
+function url_path(string $path = ''): string
+{
+    $base = '';
+
+    if (defined('BASE_PATH')) {
+        $base = (string) constant('BASE_PATH');
+    } elseif (defined('BASEPATH')) {
+        $base = (string) constant('BASEPATH');
+    }
+
+    $path = '/' . ltrim($path, '/');
+    return $base . ($path === '/' ? '' : $path);
+}
+
+/**
+ * Redirect by role.
+ */
+function redirect_by_role(string $role): void
+{
+    switch ($role) {
+        case 'admin':
+            header('Location: ' . url_path('admin-dashboard.php'));
+            break;
+        case 'mentor':
+            header('Location: ' . url_path('mentor-dashboard.php'));
+            break;
+        default:
+            header('Location: ' . url_path('dashboard.php'));
+            break;
+    }
+    exit;
+}
+
+// Redirect jika sudah login
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['role'] ?? 'student';
-    if ($role === 'mentor') {
-        header("Location: " . BASE_PATH . "/mentor-dashboard.php");
-        exit;
-    } elseif ($role === 'admin') {
-        header("Location: " . BASE_PATH . "/admin-dashboard.php");
-        exit;
-    } else {
-        header("Location: " . BASE_PATH . "/dashboard.php");
-        exit;
-    }
+    redirect_by_role($role);
 }
 
 $error = '';
+$oldEmail = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $db = (new Database())->getConnection();
-    $user = new User($db);
-
-    $email = trim($_POST['email'] ?? '');
+    $oldEmail = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (empty($email) || empty($password)) {
+    if ($oldEmail === '' || $password === '') {
         $error = 'Email dan password wajib diisi';
     } else {
-        $user->email = $email;
-        $user->password = $password;
+        try {
+            $db = (new Database())->getConnection();
+            $user = new User($db);
 
-        $result = $user->login();
+            $user->email = $oldEmail;
+            $user->password = $password;
 
-        if ($result['success']) {
-            // Cek apakah role-nya mentor
-            if ($result['user']['role'] !== 'mentor') {
-                $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
-            } elseif (!$result['user']['is_verified']) {
-                // Cek status verifikasi
-                $error = 'Akun mentor belum diverifikasi oleh admin. Mohon tunggu 1x24 jam.';
-            } else {
-                // Login berhasil
-                session_regenerate_id(true);
+            $result = $user->login();
 
-                $_SESSION['user_id'] = $result['user']['id'];
-                $_SESSION['name'] = $result['user']['name'];
-                $_SESSION['email'] = $result['user']['email'];
-                $_SESSION['role'] = $result['user']['role'];
+            // Mode A: login() mengembalikan array
+            if (is_array($result)) {
+                if (!empty($result['success'])) {
+                    $u = $result['user'] ?? [];
+                    $role = $u['role'] ?? 'student';
 
-                header("Location: " . BASE_PATH . "/mentor-dashboard.php");
-                exit;
+                    if ($role !== 'mentor') {
+                        $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
+                    } elseif (array_key_exists('is_verified', $u) && !$u['is_verified']) {
+                        $error = 'Akun mentor belum diverifikasi oleh admin. Mohon tunggu 1x24 jam.';
+                    } else {
+                        session_regenerate_id(true);
+
+                        $_SESSION['user_id'] = $u['id'] ?? null;
+                        $_SESSION['name'] = $u['name'] ?? '';
+                        $_SESSION['email'] = $u['email'] ?? $oldEmail;
+                        $_SESSION['role'] = $role;
+                        $_SESSION['login_time'] = time();
+                        $_SESSION['avatar'] = $u['avatar'] ?? null;
+
+                        header('Location: ' . url_path('mentor-dashboard.php'));
+                        exit;
+                    }
+                } else {
+                    $error = $result['message'] ?? 'Email atau password salah';
+                }
             }
-        } else {
-            $error = $result['message'];
+            // Mode B: login() mengembalikan boolean
+            elseif (is_bool($result)) {
+                if ($result === true) {
+                    // Pastikan properti role, name, id tersedia di $user
+                    $role = $user->role ?? 'student';
+                    if ($role !== 'mentor') {
+                        $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
+                    } else {
+                        session_regenerate_id(true);
+
+                        $_SESSION['user_id'] = $user->id ?? null;
+                        $_SESSION['name'] = $user->name ?? '';
+                        $_SESSION['email'] = $oldEmail;
+                        $_SESSION['role'] = $role;
+                        $_SESSION['login_time'] = time();
+
+                        header('Location: ' . url_path('mentor-dashboard.php'));
+                        exit;
+                    }
+                } else {
+                    $error = 'Email atau password salah';
+                }
+            } else {
+                $error = 'Terjadi kesalahan saat login. Coba lagi.';
+            }
+        } catch (Throwable $e) {
+            $error = 'Terjadi kesalahan server. Coba lagi nanti.';
         }
     }
 }
@@ -65,11 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login Mentor - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(url_path('style.css')); ?>">
 </head>
 <body class="auth-page">
     <div class="auth-card auth-card-mentor">
-        <a href="<?php echo BASE_PATH; ?>/index.php" class="auth-back-btn">
+        <a href="<?php echo htmlspecialchars(url_path('index.php')); ?>" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -89,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h1 class="auth-title">Login Mentor</h1>
         <p class="auth-subtitle">Masuk untuk mulai membantu mahasiswa</p>
 
-        <?php if ($error): ?>
+        <?php if (!empty($error)): ?>
             <div class="alert alert-error">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
@@ -100,36 +168,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <form method="POST" class="auth-form">
+        <form method="POST" class="auth-form" autocomplete="on">
             <div class="form-group">
                 <label for="email">Email</label>
-                <input type="email" id="email" name="email" class="auth-input" 
-                       value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" 
-                       placeholder="email.mentor@telkomuniversity.ac.id" required>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    class="auth-input"
+                    value="<?php echo htmlspecialchars($oldEmail); ?>"
+                    placeholder="email.mentor@telkomuniversity.ac.id"
+                    required
+                >
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" class="auth-input" 
-                       placeholder="Masukkan password" required>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    class="auth-input"
+                    placeholder="Masukkan password"
+                    required
+                >
             </div>
 
             <div class="form-group" style="text-align: right;">
-                <a href="<?php echo BASE_PATH; ?>/forgot-password.php" class="auth-link">Lupa password?</a>
+                <a href="<?php echo htmlspecialchars(url_path('forgot-password.php')); ?>" class="auth-link">Lupa password?</a>
             </div>
 
             <button type="submit" class="btn btn-mentor auth-button">Login sebagai Mentor</button>
         </form>
 
         <p class="auth-footer-text">
-            Belum jadi mentor? <a href="<?php echo BASE_PATH; ?>/mentor-register.php">Daftar jadi Mentor</a>
+            Belum jadi mentor? <a href="<?php echo htmlspecialchars(url_path('mentor-register.php')); ?>">Daftar jadi Mentor</a>
         </p>
 
         <div class="auth-divider">
             <span>atau</span>
         </div>
 
-        <a href="<?php echo BASE_PATH; ?>/login.php" class="btn-student-login">
+        <a href="<?php echo htmlspecialchars(url_path('login.php')); ?>" class="btn-student-login">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                 <circle cx="12" cy="7" r="4"/>

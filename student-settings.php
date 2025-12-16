@@ -1,21 +1,39 @@
 <?php
+// student-settings.php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
 
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+
+// Session check
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 if (!isset($_SESSION['user_id'])) {
-    header("Location: " . BASE_PATH . "/login.php");
+    header("Location: " . $BASE . "/login.php");
     exit;
 }
 
 $userId = $_SESSION['user_id'];
 $name = $_SESSION['name'] ?? 'User';
 
+// Database connection
+$pdo = null;
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    die("Database connection failed: " . $e->getMessage());
+}
+
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$userId]);
 $user = $stmt->fetch();
 
 if (!$user) {
-    header("Location: " . BASE_PATH . "/logout.php");
+    header("Location: " . $BASE . "/logout.php");
     exit;
 }
 
@@ -87,14 +105,14 @@ if (isset($_POST['update_name'])) {
     } elseif (strlen($newName) < 3) {
         $errorMsg = 'Nama minimal 3 karakter.';
     } elseif ($newName === $oldName) {
-        header("Location: " . BASE_PATH . "/student-dashboard.php");
+        header("Location: " . $BASE . "/student-dashboard.php");
         exit;
     } else {
         $stmt = $pdo->prepare("UPDATE users SET name = ? WHERE id = ?");
         $stmt->execute([$newName, $userId]);
         $_SESSION['name'] = $newName;
         $notif->profileUpdated($userId, 'nama');
-        header("Location: " . BASE_PATH . "/student-dashboard.php?profile_updated=1");
+        header("Location: " . $BASE . "/student-dashboard.php?profile_updated=1");
         exit;
     }
 }
@@ -130,7 +148,7 @@ $gemBalance = $user['gems'] ?? 0;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pengaturan Akun - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="settings-page">
@@ -160,7 +178,7 @@ $gemBalance = $user['gems'] ?? 0;
                     <div class="profile-photo-section">
                         <div class="profile-photo-preview">
                             <?php if ($user['avatar']): ?>
-                                <img src="<?php echo BASE_PATH . '/' . htmlspecialchars($user['avatar']); ?>" alt="Avatar" id="avatarPreview">
+                                <img src="<?php echo $BASE . '/' . htmlspecialchars($user['avatar']); ?>" alt="Avatar" id="avatarPreview">
                             <?php else: ?>
                                 <div class="avatar-placeholder" id="avatarPlaceholder">
                                     <?php echo strtoupper(substr($user['name'], 0, 1)); ?>

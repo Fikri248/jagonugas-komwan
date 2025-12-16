@@ -1,13 +1,35 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-// Cek login & role
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'mentor') {
-    header("Location: " . BASE_PATH . "/mentor-login.php");
+// Pastikan session aktif (kalau config.php belum start session)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+/**
+ * Helper URL: pakai BASE_PATH (baru), fallback ke BASEPATH (lama).
+ */
+function url_path(string $path = ''): string
+{
+    $base = '';
+
+    if (defined('BASE_PATH')) {
+        $base = (string) constant('BASE_PATH');
+    } elseif (defined('BASEPATH')) {
+        $base = (string) constant('BASEPATH');
+    }
+
+    $path = '/' . ltrim($path, '/');
+    return $base . ($path === '/' ? '' : $path);
+}
+
+// Cek login & role mentor
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'mentor') {
+    header('Location: ' . url_path('mentor-login.php'));
     exit;
 }
 
-$name = $_SESSION['name'] ?? 'Mentor';
+$name  = $_SESSION['name'] ?? 'Mentor';
 $email = $_SESSION['email'] ?? '';
 
 // Dummy stats (nanti bisa diambil dari DB)
@@ -15,6 +37,14 @@ $totalSesi = 24;
 $totalPendapatan = 180000;
 $rating = 4.8;
 $siswaAktif = 12;
+
+// Avatar initial aman untuk UTF-8
+$initial = 'M';
+if (is_string($name) && $name !== '') {
+    $initial = function_exists('mb_substr')
+        ? mb_strtoupper(mb_substr($name, 0, 1, 'UTF-8'), 'UTF-8')
+        : strtoupper(substr($name, 0, 1));
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -22,6 +52,7 @@ $siswaAktif = 12;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Mentor - JagoNugas</title>
+
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
@@ -30,29 +61,30 @@ $siswaAktif = 12;
     <header class="mentor-navbar">
         <div class="mentor-navbar-inner">
             <div class="mentor-navbar-left">
-                <a href="<?php echo BASE_PATH; ?>/mentor-dashboard.php" class="mentor-logo">
+                <a href="<?php echo htmlspecialchars(url_path('mentor-dashboard.php')); ?>" class="mentor-logo">
                     <div class="mentor-logo-mark">M</div>
                     <span class="mentor-logo-text">JagoNugas</span>
                     <span class="mentor-badge">Mentor</span>
                 </a>
                 <nav class="mentor-nav-links">
-                    <a href="<?php echo BASE_PATH; ?>/mentor-dashboard.php" class="active">Dashboard</a>
-                    <a href="<?php echo BASE_PATH; ?>/mentor-bookings.php">Booking Saya</a>
-                    <a href="<?php echo BASE_PATH; ?>/mentor-chat.php">Chat</a>
+                    <a href="<?php echo htmlspecialchars(url_path('mentor-dashboard.php')); ?>" class="active">Dashboard</a>
+                    <a href="<?php echo htmlspecialchars(url_path('mentor-bookings.php')); ?>">Booking Saya</a>
+                    <a href="<?php echo htmlspecialchars(url_path('mentor-chat.php')); ?>">Chat</a>
                 </nav>
             </div>
-            
+
             <div class="mentor-navbar-right">
-                <!-- Notification Bell -->
+                <!-- Notification Bell (dummy UI) -->
                 <div class="mentor-notif-wrapper">
-                    <button class="mentor-notif-btn">
+                    <button class="mentor-notif-btn" type="button">
                         <i class="bi bi-bell"></i>
                         <span class="notif-badge">3</span>
                     </button>
+
                     <div class="mentor-notif-dropdown">
                         <div class="notif-header">
                             <h4>Notifikasi</h4>
-                            <button class="btn-mark-read" title="Tandai semua dibaca">
+                            <button class="btn-mark-read" type="button" title="Tandai semua dibaca">
                                 <i class="bi bi-check2-all"></i>
                             </button>
                         </div>
@@ -66,6 +98,7 @@ $siswaAktif = 12;
                                     <span class="notif-time">5 menit yang lalu</span>
                                 </div>
                             </a>
+
                             <a href="#" class="notif-item unread">
                                 <div class="notif-icon review">
                                     <i class="bi bi-star"></i>
@@ -75,6 +108,7 @@ $siswaAktif = 12;
                                     <span class="notif-time">1 jam yang lalu</span>
                                 </div>
                             </a>
+
                             <a href="#" class="notif-item">
                                 <div class="notif-icon chat">
                                     <i class="bi bi-chat-dots"></i>
@@ -90,17 +124,17 @@ $siswaAktif = 12;
 
                 <!-- User Menu -->
                 <div class="mentor-user-menu">
-                    <div class="mentor-avatar"><?php echo strtoupper(substr($name, 0, 1)); ?></div>
+                    <div class="mentor-avatar"><?php echo htmlspecialchars($initial); ?></div>
                     <div class="mentor-user-info">
                         <span class="mentor-user-name"><?php echo htmlspecialchars($name); ?></span>
                         <span class="mentor-user-role">Mentor</span>
                     </div>
                     <i class="bi bi-chevron-down"></i>
                     <div class="mentor-dropdown">
-                        <a href="<?php echo BASE_PATH; ?>/mentor-profile.php"><i class="bi bi-person"></i> Profil Saya</a>
-                        <a href="<?php echo BASE_PATH; ?>/mentor-settings.php"><i class="bi bi-gear"></i> Pengaturan</a>
+                        <a href="<?php echo htmlspecialchars(url_path('mentor-profile.php')); ?>"><i class="bi bi-person"></i> Profil Saya</a>
+                        <a href="<?php echo htmlspecialchars(url_path('mentor-settings.php')); ?>"><i class="bi bi-gear"></i> Pengaturan</a>
                         <div class="dropdown-divider"></div>
-                        <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                        <a href="<?php echo htmlspecialchars(url_path('logout.php')); ?>" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                     </div>
                 </div>
             </div>
@@ -111,11 +145,11 @@ $siswaAktif = 12;
         <!-- Welcome Section -->
         <section class="mentor-welcome">
             <div class="welcome-content">
-                <h1>Halo, <?php echo htmlspecialchars($name); ?>! 👋</h1>
+                <h1>Halo, <?php echo htmlspecialchars($name); ?>!</h1>
                 <p>Siap membantu mahasiswa hari ini?</p>
             </div>
             <div class="welcome-action">
-                <a href="<?php echo BASE_PATH; ?>/mentor-availability.php" class="btn btn-mentor-outline">
+                <a href="<?php echo htmlspecialchars(url_path('mentor-availability.php')); ?>" class="btn btn-mentor-outline">
                     <i class="bi bi-calendar-check"></i>
                     Atur Jadwal
                 </a>
@@ -129,10 +163,11 @@ $siswaAktif = 12;
                     <i class="bi bi-journal-check"></i>
                 </div>
                 <div class="mentor-stat-info">
-                    <span class="mentor-stat-value"><?php echo $totalSesi; ?></span>
+                    <span class="mentor-stat-value"><?php echo (int) $totalSesi; ?></span>
                     <span class="mentor-stat-label">Total Sesi</span>
                 </div>
             </div>
+
             <div class="mentor-stat-card">
                 <div class="mentor-stat-icon green">
                     <i class="bi bi-wallet2"></i>
@@ -142,21 +177,23 @@ $siswaAktif = 12;
                     <span class="mentor-stat-label">Pendapatan</span>
                 </div>
             </div>
+
             <div class="mentor-stat-card">
                 <div class="mentor-stat-icon yellow">
                     <i class="bi bi-star-fill"></i>
                 </div>
                 <div class="mentor-stat-info">
-                    <span class="mentor-stat-value"><?php echo $rating; ?></span>
+                    <span class="mentor-stat-value"><?php echo number_format((float) $rating, 1); ?></span>
                     <span class="mentor-stat-label">Rating</span>
                 </div>
             </div>
+
             <div class="mentor-stat-card">
                 <div class="mentor-stat-icon purple">
                     <i class="bi bi-people-fill"></i>
                 </div>
                 <div class="mentor-stat-info">
-                    <span class="mentor-stat-value"><?php echo $siswaAktif; ?></span>
+                    <span class="mentor-stat-value"><?php echo (int) $siswaAktif; ?></span>
                     <span class="mentor-stat-label">Siswa Aktif</span>
                 </div>
             </div>
@@ -168,8 +205,9 @@ $siswaAktif = 12;
             <section class="mentor-section">
                 <div class="mentor-section-header">
                     <h2><i class="bi bi-calendar3"></i> Booking Terbaru</h2>
-                    <a href="<?php echo BASE_PATH; ?>/mentor-bookings.php" class="section-link">Lihat Semua</a>
+                    <a href="<?php echo htmlspecialchars(url_path('mentor-bookings.php')); ?>" class="section-link">Lihat Semua</a>
                 </div>
+
                 <div class="booking-list">
                     <div class="booking-item pending">
                         <div class="booking-info">
@@ -178,10 +216,11 @@ $siswaAktif = 12;
                             <span class="booking-time">Hari ini, 14:00 - 15:30</span>
                         </div>
                         <div class="booking-actions">
-                            <button class="btn-sm btn-accept">Terima</button>
-                            <button class="btn-sm btn-reject">Tolak</button>
+                            <button class="btn-sm btn-accept" type="button">Terima</button>
+                            <button class="btn-sm btn-reject" type="button">Tolak</button>
                         </div>
                     </div>
+
                     <div class="booking-item confirmed">
                         <div class="booking-info">
                             <span class="booking-name">Siti Nurhaliza</span>
@@ -190,6 +229,7 @@ $siswaAktif = 12;
                         </div>
                         <span class="booking-status confirmed">Dikonfirmasi</span>
                     </div>
+
                     <div class="booking-item completed">
                         <div class="booking-info">
                             <span class="booking-name">Budi Santoso</span>
@@ -206,6 +246,7 @@ $siswaAktif = 12;
                 <div class="mentor-section-header">
                     <h2><i class="bi bi-chat-quote"></i> Review Terbaru</h2>
                 </div>
+
                 <div class="review-list">
                     <div class="review-item">
                         <div class="review-header">
@@ -214,6 +255,7 @@ $siswaAktif = 12;
                         </div>
                         <p class="review-text">"Penjelasannya sangat jelas dan sabar banget. Recommended!"</p>
                     </div>
+
                     <div class="review-item">
                         <div class="review-header">
                             <span class="review-author">Dewi Kartika</span>

@@ -1,157 +1,157 @@
 <?php
-// app.php - Simple Router untuk struktur flat
+// app.php - Simple Router untuk struktur flat (updated)
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-$request = $_SERVER['REQUEST_URI'];
-$basePath = BASE_PATH;
+/**
+ * Ambil path request tanpa query string, lalu normalisasi dan buang BASE_PATH (kalau ada).
+ */
+function getRequestPath(string $basePath): string
+{
+    // Path tanpa query string (lebih aman daripada main str_replace ke full REQUEST_URI)
+    $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
-// Remove base path dan query string
-$request = str_replace($basePath, '', $request);
-$request = strtok($request, '?');
-$request = trim($request, '/');
+    // Normalisasi basePath
+    $basePath = (string)$basePath;
+    if ($basePath === '/') $basePath = '';
+    $basePath = rtrim($basePath, '/');
 
-// Route params untuk dynamic routes
-$routeParams = [];
+    // Kalau basePath ada dan request dimulai dengan basePath, buang prefix-nya
+    if ($basePath !== '' && str_starts_with($uriPath, $basePath)) {
+        $uriPath = substr($uriPath, strlen($basePath));
+        if ($uriPath === false) $uriPath = '/';
+    }
 
-switch (true) {
-    // ===== PUBLIC ROUTES =====
-    case $request === '':
-    case $request === 'home':
-        require __DIR__ . '/index.php';
-        break;
-    
-    case $request === 'login':
-        require __DIR__ . '/login.php';
-        break;
-    
-    case $request === 'register':
-        require __DIR__ . '/register.php';
-        break;
-    
-    case $request === 'logout':
-        require __DIR__ . '/logout.php';
-        break;
-    
-    case $request === 'forgot-password':
-        require __DIR__ . '/forgot-password.php';
-        break;
-    
-    case $request === 'reset-password':
-        require __DIR__ . '/reset-password.php';
-        break;
+    // Normalisasi path akhir
+    $uriPath = '/' . ltrim($uriPath, '/');    // pastikan diawali "/"
+    $uriPath = rtrim($uriPath, '/');          // buang trailing slash (kecuali root)
+    if ($uriPath === '') $uriPath = '/';
 
-    // ===== STUDENT DASHBOARD =====
-    case $request === 'dashboard':
-        require __DIR__ . '/student-dashboard.php';
-        break;
-    
-    case $request === 'diskusi':
-        require __DIR__ . '/student-diskusi.php';
-        break;
+    // Jadi format final tanpa slash depan untuk routing switch (kecuali root jadi '')
+    $route = trim($uriPath, '/');
 
-    case $request === 'settings':
-        require __DIR__ . '/student-settings.php';
-        break;
+    // Proteksi simpel biar nggak ada path traversal aneh
+    if (str_contains($route, '..')) {
+        return '__invalid__';
+    }
 
-    // ===== FORUM ROUTES =====
-    case $request === 'forum':
-        require __DIR__ . '/student-forum.php';
-        break;
-    
-    case $request === 'forum/create':
-        require __DIR__ . '/student-forum-create.php';
-        break;
-    
-    case preg_match('#^forum/edit/(\d+)$#', $request, $matches) === 1:
-        $_GET['id'] = $matches[1];
-        require __DIR__ . '/student-forum-edit.php';
-        break;
-    
-    case preg_match('#^forum/thread/(\d+)$#', $request, $matches) === 1:
-        $_GET['id'] = $matches[1];
-        require __DIR__ . '/student-forum-thread.php';
-        break;
+    return $route; // contoh: '', 'login', 'forum/thread/12', 'admin/mentors'
+}
+
+/**
+ * Include file target dengan pengecekan exist.
+ */
+function includeRouteFile(string $file): void
+{
+    $full = __DIR__ . '/' . ltrim($file, '/');
+
+    if (!is_file($full)) {
+        http_response_code(500);
+        echo "Route target tidak ditemukan: " . htmlspecialchars($file);
+        exit;
+    }
+
+    require $full;
+    exit;
+}
+
+$request = getRequestPath(BASE_PATH);
+
+// Optional: rapihin URL kalau ada /app.php atau /index.php di URL (kalau kejadian)
+if ($request === 'app.php' || str_starts_with($request, 'app.php/')) {
+    $new = str_replace('app.php', '', $request);
+    $new = trim($new, '/');
+    header("Location: " . BASE_PATH . ($new ? '/' . $new : '/') , true, 301);
+    exit;
+}
+if ($request === 'index.php' || str_starts_with($request, 'index.php/')) {
+    $new = str_replace('index.php', '', $request);
+    $new = trim($new, '/');
+    header("Location: " . BASE_PATH . ($new ? '/' . $new : '/') , true, 301);
+    exit;
+}
+
+// Route statis (langsung map string -> file)
+$staticRoutes = [
+    // ===== PUBLIC =====
+    '' => 'index.php',
+    'home' => 'index.php',
+    'login' => 'login.php',
+    'register' => 'register.php',
+    'logout' => 'logout.php',
+    'forgot-password' => 'forgot-password.php',
+    'reset-password' => 'reset-password.php',
+
+    // ===== STUDENT =====
+    'dashboard' => 'student-dashboard.php',
+    'diskusi' => 'student-diskusi.php',
+    'settings' => 'student-settings.php',
+
+    // ===== FORUM =====
+    'forum' => 'student-forum.php',
+    'forum/create' => 'student-forum-create.php',
 
     // ===== MENTOR PUBLIC =====
-    case $request === 'mentor':
-        require __DIR__ . '/student-mentor.php';
-        break;
+    'mentor' => 'student-mentor.php',
 
     // ===== MENTOR PANEL =====
-    case $request === 'mentor/login':
-        require __DIR__ . '/mentor-login.php';
-        break;
+    'mentor/login' => 'mentor-login.php',
+    'mentor/register' => 'mentor-register.php',
+    'mentor/dashboard' => 'mentor-dashboard.php',
+    'mentor/bookings' => 'mentor-bookings.php',
+    'mentor/chat' => 'mentor-chat.php',
+    'mentor/profile' => 'mentor-profile.php',
+    'mentor/settings' => 'mentor-settings.php',
+    'mentor/availability' => 'mentor-availability.php',
 
-    case $request === 'mentor/register':
-        require __DIR__ . '/mentor-register.php';
-        break;
+    // ===== ADMIN =====
+    'admin/dashboard' => 'admin-dashboard.php',
+    'admin/users' => 'admin-users.php',
+    'admin/mentors' => 'admin-mentors.php',
+    'admin/transactions' => 'admin-transactions.php',
+    'admin/settings' => 'admin-settings.php',
+    'admin/reports' => 'admin-reports.php',
 
-    case $request === 'mentor/dashboard':
-        require __DIR__ . '/mentor-dashboard.php';
-        break;
-    
-    case $request === 'mentor/bookings':
-        require __DIR__ . '/mentor-bookings.php';
-        break;
-    
-    case $request === 'mentor/chat':
-        require __DIR__ . '/mentor-chat.php';
-        break;
-    
-    case $request === 'mentor/profile':
-        require __DIR__ . '/mentor-profile.php';
-        break;
-    
-    case $request === 'mentor/settings':
-        require __DIR__ . '/mentor-settings.php';
-        break;
-    
-    case $request === 'mentor/availability':
-        require __DIR__ . '/mentor-availability.php';
-        break;
+    // ===== API =====
+    'api/forum/upvote' => 'api-forum-upvote.php',
+    'api/notifications/read' => 'api-notif-read.php',
+    'api/notifications/read-all' => 'api-notif-read-all.php',
+];
 
-    // ===== ADMIN ROUTES =====
-    case $request === 'admin/dashboard':
-        require __DIR__ . '/admin-dashboard.php';
-        break;
-
-    case $request === 'admin/users':
-        require __DIR__ . '/admin-users.php';
-        break;
-
-    case $request === 'admin/mentors':
-        require __DIR__ . '/admin-mentors.php';
-        break;
-    
-    case $request === 'admin/transactions':
-        require __DIR__ . '/admin-transactions.php';
-        break;
-    
-    case $request === 'admin/settings':
-        require __DIR__ . '/admin-settings.php';
-        break;
-    
-    case $request === 'admin/reports':
-        require __DIR__ . '/admin-reports.php';
-        break;
-
-    // ===== API ROUTES =====
-    case $request === 'api/forum/upvote':
-        require __DIR__ . '/api-forum-upvote.php';
-        break;
-    
-    case $request === 'api/notifications/read':
-        require __DIR__ . '/api-notif-read.php';
-        break;
-    
-    case $request === 'api/notifications/read-all':
-        require __DIR__ . '/api-notif-read-all.php';
-        break;
-
-    // ===== 404 =====
-    default:
-        http_response_code(404);
+// Invalid path guard
+if ($request === '__invalid__') {
+    http_response_code(400);
+    if (is_file(__DIR__ . '/404.php')) {
         require __DIR__ . '/404.php';
-        break;
+    } else {
+        echo "400 Bad Request";
+    }
+    exit;
 }
+
+// 1) Cek route statis dulu
+if (array_key_exists($request, $staticRoutes)) {
+    includeRouteFile($staticRoutes[$request]);
+}
+
+// 2) Dynamic routes (pakai regex)
+if (preg_match('#^forum/edit/(\d+)$#', $request, $m) === 1) {
+    $_GET['id'] = $m[1];
+    includeRouteFile('student-forum-edit.php');
+}
+
+if (preg_match('#^forum/thread/(\d+)$#', $request, $m) === 1) {
+    $_GET['id'] = $m[1];
+    includeRouteFile('student-forum-thread.php');
+}
+
+// 3) Default 404
+http_response_code(404);
+if (is_file(__DIR__ . '/404.php')) {
+    require __DIR__ . '/404.php';
+} else {
+    echo "404 Not Found";
+}
+exit;

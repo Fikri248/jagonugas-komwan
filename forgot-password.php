@@ -1,6 +1,12 @@
 <?php
+// forgot-password.php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/ModelUser.php';
+
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+$BASE_URL = defined('BASE_URL') ? constant('BASE_URL') : '';
 
 $error = '';
 $success = '';
@@ -21,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = $user->createResetToken();
 
         if ($result['success']) {
-            $resetLink = BASE_URL . BASE_PATH . "/reset-password.php?token=" . $result['token'];
+            $resetLink = $BASE_URL . "/reset-password.php?token=" . $result['token'];
             $success = 'Link reset password berhasil dibuat!';
         } else {
             $error = 'Email tidak terdaftar di sistem kami';
@@ -35,11 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lupa Password - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
 </head>
 <body class="auth-page">
     <div class="auth-card">
-        <a href="<?php echo BASE_PATH; ?>/login.php" class="auth-back-btn">
+        <a href="<?php echo $BASE; ?>/login.php" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>

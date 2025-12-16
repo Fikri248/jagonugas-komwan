@@ -1,10 +1,16 @@
 <?php
+// student-navbar.php
+
+// Defensive: fallback kalau BASE_PATH ga ke-define
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+
 $currentUser = null;
 $userGems = 0;
 $notifications = [];
 $unreadCount = 0;
 
-if (isset($_SESSION['user_id'])) {
+// Cek apakah $pdo valid sebelum query
+if ($pdo && isset($_SESSION['user_id'])) {
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $currentUser = $stmt->fetch();
@@ -23,6 +29,7 @@ if (isset($_SESSION['user_id'])) {
         $unreadCount = 0;
     }
 }
+
 
 if (!function_exists('notif_time_ago')) {
     function notif_time_ago($datetime) {
@@ -43,12 +50,12 @@ if (!function_exists('notif_time_ago')) {
 <header class="dash-topbar">
     <div class="dash-topbar-inner">
         <div class="dash-topbar-left">
-            <a href="<?php echo BASE_PATH; ?>/student-dashboard.php" class="dash-logo">
+            <a href="<?php echo $BASE; ?>/student-dashboard.php" class="dash-logo">
                 <span>JagoNugas</span>
             </a>
         </div>
 
-        <form class="dash-search" action="<?php echo BASE_PATH; ?>/student-forum.php" method="GET">
+        <form class="dash-search" action="<?php echo $BASE; ?>/student-forum.php" method="GET">
             <i class="bi bi-search"></i>
             <input type="text" name="search" placeholder="Cari jawaban untuk pertanyaan apa aja..." />
         </form>
@@ -60,8 +67,8 @@ if (!function_exists('notif_time_ago')) {
             </div>
 
             <nav class="dash-nav-links">
-                <a href="<?php echo BASE_PATH; ?>/student-mentor.php">Mentor</a>
-                <a href="<?php echo BASE_PATH; ?>/student-membership.php">Membership</a>
+                <a href="<?php echo $BASE; ?>/student-mentor.php">Mentor</a>
+                <a href="<?php echo $BASE; ?>/student-membership.php">Membership</a>
             </nav>
 
             <?php if ($currentUser): ?>
@@ -108,7 +115,7 @@ if (!function_exists('notif_time_ago')) {
                 </div>
             </div>
             <?php else: ?>
-            <button type="button" class="dash-notif-trigger" onclick="window.location.href='<?php echo BASE_PATH; ?>/login.php'">
+            <button type="button" class="dash-notif-trigger" onclick="window.location.href='<?php echo $BASE; ?>/login.php'">
                 <i class="bi bi-bell"></i>
             </button>
             <?php endif; ?>
@@ -118,7 +125,7 @@ if (!function_exists('notif_time_ago')) {
                 <div class="dash-user-trigger" id="userTrigger">
                     <div class="dash-avatar">
                         <?php if (!empty($currentUser['avatar'])): ?>
-                            <img src="<?php echo BASE_PATH . '/' . htmlspecialchars($currentUser['avatar']); ?>" alt="Avatar">
+                            <img src="<?php echo $BASE . '/' . htmlspecialchars($currentUser['avatar']); ?>" alt="Avatar">
                         <?php else: ?>
                             <?php echo strtoupper(substr($currentUser['name'], 0, 1)); ?>
                         <?php endif; ?>
@@ -138,16 +145,16 @@ if (!function_exists('notif_time_ago')) {
                     <i class="bi bi-chevron-down"></i>
                 </div>
                 <div class="dash-dropdown-menu">
-                    <a href="<?php echo BASE_PATH; ?>/student-chat-history.php"><i class="bi bi-chat-left-text"></i> Histori Chat</a>
-                    <a href="<?php echo BASE_PATH; ?>/student-settings.php"><i class="bi bi-gear"></i> Pengaturan Akun</a>
+                    <a href="<?php echo $BASE; ?>/student-chat-history.php"><i class="bi bi-chat-left-text"></i> Histori Chat</a>
+                    <a href="<?php echo $BASE; ?>/student-settings.php"><i class="bi bi-gear"></i> Pengaturan Akun</a>
                     <div class="dropdown-divider"></div>
-                    <a href="<?php echo BASE_PATH; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                    <a href="<?php echo $BASE; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
                 </div>
             </div>
             <?php else: ?>
             <div class="dash-auth-buttons">
-                <a href="<?php echo BASE_PATH; ?>/login.php" class="btn btn-outline btn-sm">Login</a>
-                <a href="<?php echo BASE_PATH; ?>/register.php" class="btn btn-primary btn-sm">Daftar</a>
+                <a href="<?php echo $BASE; ?>/login.php" class="btn btn-outline btn-sm">Login</a>
+                <a href="<?php echo $BASE; ?>/register.php" class="btn btn-primary btn-sm">Daftar</a>
             </div>
             <?php endif; ?>
         </div>
@@ -183,7 +190,7 @@ if (!function_exists('notif_time_ago')) {
     document.getElementById('markAllRead')?.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        fetch('<?php echo BASE_PATH; ?>/api-notif-read-all.php', {
+        fetch('<?php echo $BASE; ?>/api-notif-read-all.php', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'}
         }).then(() => {
@@ -201,7 +208,7 @@ if (!function_exists('notif_time_ago')) {
             e.stopPropagation();
             const id = this.dataset.notifId;
             if (id && this.classList.contains('unread')) {
-                fetch('<?php echo BASE_PATH; ?>/api-notif-read.php', {
+                fetch('<?php echo $BASE; ?>/api-notif-read.php', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({id: id})
