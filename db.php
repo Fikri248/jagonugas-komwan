@@ -25,7 +25,7 @@ class Database {
             $this->host     = 'localhost';
             $this->db_name  = 'jagonugas_db';
             $this->username = 'root';
-            $this->password = 'root';
+            $this->password = '';
             $this->port     = 3306;
         }
     }
@@ -54,3 +54,8 @@ class Database {
         return $this->conn;
     }
 }
+// ======================================
+// AUTO INITIALIZE CONNECTION
+// ======================================
+$database = new Database();
+$pdo = $database->getConnection();

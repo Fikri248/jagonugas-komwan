@@ -40,6 +40,12 @@ $successMsg = '';
 if (isset($_GET['profile_updated'])) {
     $successMsg = 'Profil berhasil diperbarui!';
 }
+if (isset($_GET['rated'])) {
+    $successMsg = 'Review berhasil dikirim! Terima kasih atas feedback Anda.';
+}
+if (isset($_GET['booking_success'])) {
+    $successMsg = 'Booking mentor berhasil! Mentor akan segera menghubungi Anda.';
+}
 
 // Ambil data user (kalau PDO ada)
 if ($pdo) {
@@ -95,7 +101,7 @@ function time_elapsed(string $datetime): string {
     return 'Baru saja';
 }
 
-// Stats
+// Stats Forum
 $totalReplies = 0;
 $totalGemsEarned = 0;
 
@@ -123,6 +129,59 @@ if ($pdo) {
     } catch (Throwable $e) {}
 }
 
+// ===== MENTOR BOOKING STATS =====
+$active_sessions = 0;
+$pending_sessions = 0;
+$completed_sessions = 0;
+$need_rating = 0;
+
+if ($pdo) {
+    try {
+        // Active sessions
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM sessions 
+            WHERE student_id = ? AND status = 'ongoing'
+        ");
+        $stmt->execute([$userId]);
+        $active_sessions = (int)$stmt->fetchColumn();
+    } catch (Throwable $e) {}
+
+    try {
+        // Pending sessions
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM sessions 
+            WHERE student_id = ? AND status = 'pending'
+        ");
+        $stmt->execute([$userId]);
+        $pending_sessions = (int)$stmt->fetchColumn();
+    } catch (Throwable $e) {}
+
+    try {
+        // Completed sessions
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM sessions 
+            WHERE student_id = ? AND status = 'completed'
+        ");
+        $stmt->execute([$userId]);
+        $completed_sessions = (int)$stmt->fetchColumn();
+    } catch (Throwable $e) {}
+
+    try {
+        // Sessions that need rating
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM sessions s
+            LEFT JOIN mentor_reviews mr ON s.id = mr.session_id
+            WHERE s.student_id = ? AND s.status = 'completed' AND mr.id IS NULL
+        ");
+        $stmt->execute([$userId]);
+        $need_rating = (int)$stmt->fetchColumn();
+    } catch (Throwable $e) {}
+}
+
 // Pertanyaan sendiri (ambil 1 terbaru)
 $myQuestions = [];
 if ($pdo) {
@@ -144,7 +203,7 @@ if ($pdo) {
 
 // Pertanyaan mahasiswa lain
 $recentQuestionsLimit = !empty($myQuestions) ? 3 : 1;
-$recentQuestionsLimit = max(1, min(10, (int)$recentQuestionsLimit)); // safety
+$recentQuestionsLimit = max(1, min(10, (int)$recentQuestionsLimit));
 $recentQuestions = [];
 
 if ($pdo) {
@@ -186,7 +245,7 @@ if ($pdo) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - JagoNugas</title>
-        <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
+    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
 <body class="dashboard-page">
@@ -201,6 +260,7 @@ if ($pdo) {
         </div>
         <?php endif; ?>
 
+        <!-- Hero Section -->
         <section class="dash-hero">
             <div class="dash-hero-content">
                 <h1>Lagi Kesulitan?</h1>
@@ -238,6 +298,55 @@ if ($pdo) {
             </div>
         </section>
 
+        <!-- ===== MENTOR BOOKING QUICK STATS ===== -->
+        <section class="dash-quick-stats">
+            <div class="quick-stat-card">
+                <div class="stat-icon ongoing">
+                    <i class="bi bi-play-circle-fill"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Sesi Berlangsung</h3>
+                    <p class="stat-number"><?php echo $active_sessions; ?></p>
+                    <a href="<?php echo htmlspecialchars($BASE); ?>/student-sessions.php?filter=ongoing" class="stat-link">
+                        Lihat Detail <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="quick-stat-card">
+                <div class="stat-icon pending">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Menunggu Konfirmasi</h3>
+                    <p class="stat-number"><?php echo $pending_sessions; ?></p>
+                    <a href="<?php echo htmlspecialchars($BASE); ?>/student-sessions.php?filter=pending" class="stat-link">
+                        Lihat Detail <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="quick-stat-card">
+                <div class="stat-icon rating">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Perlu Rating</h3>
+                    <p class="stat-number"><?php echo $need_rating; ?></p>
+                    <?php if ($need_rating > 0): ?>
+                        <a href="<?php echo htmlspecialchars($BASE); ?>/student-sessions.php?filter=completed" class="stat-link highlight">
+                            Beri Rating Sekarang <i class="bi bi-arrow-right"></i>
+                        </a>
+                    <?php else: ?>
+                        <span class="stat-link-muted">
+                            <i class="bi bi-check-circle"></i> Semua sudah di-rating
+                        </span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </section>
+
+        <!-- My Questions Section -->
         <?php if (!empty($myQuestions)): ?>
         <section class="dash-questions">
             <div class="dash-section-header">
@@ -288,6 +397,7 @@ if ($pdo) {
         <?php endif; ?>
     </main>
 
+    <!-- Sidebar -->
     <aside class="dash-sidebar">
         <div class="dash-sidebar-card">
             <h3>Menu Cepat</h3>
@@ -298,11 +408,11 @@ if ($pdo) {
                 <a href="<?php echo htmlspecialchars($BASE); ?>/student-mentor.php" class="dash-quick-item">
                     <i class="bi bi-person-video3"></i><span>Cari Mentor</span>
                 </a>
+                <a href="<?php echo htmlspecialchars($BASE); ?>/student-sessions.php" class="dash-quick-item">
+                    <i class="bi bi-calendar-check"></i><span>Sesi Mentor</span>
+                </a>
                 <a href="<?php echo htmlspecialchars($BASE); ?>/student-topup.php" class="dash-quick-item">
                     <i class="bi bi-gem"></i><span>Top Up Gem</span>
-                </a>
-                <a href="<?php echo htmlspecialchars($BASE); ?>/student-chat-history.php" class="dash-quick-item">
-                    <i class="bi bi-chat-left-text"></i><span>Histori Chat</span>
                 </a>
             </div>
         </div>
@@ -340,7 +450,7 @@ if ($pdo) {
                         </div>
                         <div class="dash-mentor-info">
                             <span class="name"><?php echo htmlspecialchars((string)$mentor['name']); ?></span>
-                            <span class="expertise"><?php echo htmlspecialchars((string)($mentor['expertise'] ?? '')); ?></span>
+                            <span class="expertise"><?php echo htmlspecialchars((string)($mentor['specialization'] ?? $mentor['expertise'] ?? '')); ?></span>
                         </div>
                         <div class="dash-mentor-rating"><i class="bi bi-star-fill"></i> <?php echo number_format((float)($mentor['rating'] ?? 0), 1); ?></div>
                     </div>
@@ -354,10 +464,10 @@ if ($pdo) {
 </div>
 
 <?php
-// Biar user baru tetap lihat pertanyaan orang lain walau belum pernah nanya
 $showRecentFullWidth = !empty($myQuestions);
 ?>
 
+<!-- Other Students Questions (Full Width) -->
 <?php if ($showRecentFullWidth): ?>
 <div class="dash-full-section">
     <section class="dash-questions">
@@ -424,7 +534,7 @@ $showRecentFullWidth = !empty($myQuestions);
     </section>
 </div>
 <?php else: ?>
-<!-- Kalau belum ada pertanyaan sendiri, tetap tampilkan recentQuestions (layout normal) -->
+<!-- Alternative layout when no my questions -->
 <div class="dash-container">
     <main class="dash-main" style="grid-column: 1 / -1;">
         <section class="dash-questions">
@@ -495,6 +605,7 @@ $showRecentFullWidth = !empty($myQuestions);
 <?php endif; ?>
 
 <script>
+// Auto-hide success alert
 const successAlert = document.querySelector('.alert-success');
 if (successAlert) {
     setTimeout(() => {
