@@ -531,7 +531,7 @@ body {
 .pricing-features li {
     padding: 12px 0;
     color: #4a5568;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid  #4a5568;
 }
 
 .pricing-features li:last-child {
@@ -9625,17 +9625,19 @@ body {
 }
 
 .gem-amount {
-    font-size: 3rem;
-    font-weight: 900;
-    margin: 0;
-    color: #ffffff;
-    text-shadow: 
-        0 2px 4px rgba(0,0,0,0.2),
-        0 4px 8px rgba(0,0,0,0.1);
-    letter-spacing: 2px;
-    border: none;
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin: 0.5rem 0 0;
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;              /* teks ambil warna dari gradient */
+    text-shadow: none;
+    letter-spacing: 1px;
     text-align: center;
 }
+
+
 
 /* ============================================================
    FILTER SECTION
