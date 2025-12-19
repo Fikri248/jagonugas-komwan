@@ -2,8 +2,8 @@ pipeline {
   agent any
 
   environment {
-    IMAGE_NAME = 'mrizkyardian/jago-nugas'          // repo Docker Hub kamu
-    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // ID credentials di Jenkins
+    IMAGE_NAME = 'mrizkyardian/jago-nugas'
+    REGISTRY_CREDENTIALS = 'dockerhub-credentials'
   }
 
   stages {
@@ -15,7 +15,13 @@ pipeline {
 
     stage('Build Docker Image') {
       steps {
-        sh "docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ."
+        script {
+          if (isUnix()) {
+            sh "docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ."
+          } else {
+            bat "docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ."
+          }
+        }
       }
     }
 
@@ -26,12 +32,23 @@ pipeline {
           usernameVariable: 'DOCKER_USER',
           passwordVariable: 'DOCKER_PASS'
         )]) {
-          sh '''
-            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-            docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
-            docker push ${IMAGE_NAME}:latest
-          '''
+          script {
+            if (isUnix()) {
+              sh '''
+                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                docker push ${IMAGE_NAME}:${BUILD_NUMBER}
+                docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
+                docker push ${IMAGE_NAME}:latest
+              '''
+            } else {
+              bat """
+                echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                docker push %IMAGE_NAME%:%BUILD_NUMBER%
+                docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+                docker push %IMAGE_NAME%:latest
+              """
+            }
+          }
         }
       }
     }
@@ -39,7 +56,7 @@ pipeline {
 
   post {
     success {
-      echo "Image ${env.IMAGE_NAME}:${env.BUILD_NUMBER} berhasil dipush, siap dipakai di Azure Web App / Container Apps."
+      echo "Image ${env.IMAGE_NAME}:${env.BUILD_NUMBER} berhasil dipush ke registry, siap dipakai di Azure Web App for Containers."
     }
   }
 }
