@@ -30,7 +30,6 @@ if ($pdo && isset($_SESSION['user_id'])) {
     }
 }
 
-
 if (!function_exists('notif_time_ago')) {
     function notif_time_ago($datetime) {
         $tz = new DateTimeZone('Asia/Jakarta');
@@ -46,6 +45,9 @@ if (!function_exists('notif_time_ago')) {
         return 'Baru saja';
     }
 }
+
+// Get current page for active state
+$currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <header class="dash-topbar">
     <div class="dash-topbar-inner">
@@ -61,14 +63,27 @@ if (!function_exists('notif_time_ago')) {
         </form>
 
         <div class="dash-topbar-right">
-            <div class="dash-gem">
+            <a href="<?php echo $BASE; ?>/student-topup.php" class="dash-gem" title="Top Up Gems">
                 <i class="bi bi-gem"></i>
                 <span><?php echo number_format($userGems, 0, ',', '.'); ?></span>
-            </div>
+            </a>
 
             <nav class="dash-nav-links">
-                <a href="<?php echo $BASE; ?>/student-mentor.php">Mentor</a>
-                <a href="<?php echo $BASE; ?>/student-membership.php">Membership</a>
+                <a href="<?php echo $BASE; ?>/student-mentor.php" 
+                   class="<?php echo in_array($currentPage, ['student-mentor.php', 'mentor-booking.php']) ? 'active' : ''; ?>">
+                    <i class="bi bi-person-video3"></i>
+                    <span>Mentor</span>
+                </a>
+                <a href="<?php echo $BASE; ?>/student-sessions.php" 
+                   class="<?php echo in_array($currentPage, ['student-sessions.php', 'session-rating.php']) ? 'active' : ''; ?>">
+                    <i class="bi bi-calendar-check"></i>
+                    <span>Sesi Saya</span>
+                </a>
+                <a href="<?php echo $BASE; ?>/student-membership.php" 
+                   class="<?php echo $currentPage === 'student-membership.php' ? 'active' : ''; ?>">
+                    <i class="bi bi-star"></i>
+                    <span>Membership</span>
+                </a>
             </nav>
 
             <?php if ($currentUser): ?>
@@ -145,10 +160,26 @@ if (!function_exists('notif_time_ago')) {
                     <i class="bi bi-chevron-down"></i>
                 </div>
                 <div class="dash-dropdown-menu">
-                    <a href="<?php echo $BASE; ?>/student-chat-history.php"><i class="bi bi-chat-left-text"></i> Histori Chat</a>
-                    <a href="<?php echo $BASE; ?>/student-settings.php"><i class="bi bi-gear"></i> Pengaturan Akun</a>
+                    <a href="<?php echo $BASE; ?>/student-dashboard.php">
+                        <i class="bi bi-house-door"></i> Dashboard
+                    </a>
+                    <a href="<?php echo $BASE; ?>/student-sessions.php">
+                        <i class="bi bi-calendar-check"></i> Sesi Mentor Saya
+                    </a>
+                    <a href="<?php echo $BASE; ?>/student-chat-history.php">
+                        <i class="bi bi-chat-left-text"></i> Histori Chat
+                    </a>
                     <div class="dropdown-divider"></div>
-                    <a href="<?php echo $BASE; ?>/logout.php" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+                    <a href="<?php echo $BASE; ?>/student-topup.php">
+                        <i class="bi bi-gem"></i> Top Up Gems
+                    </a>
+                    <a href="<?php echo $BASE; ?>/student-settings.php">
+                        <i class="bi bi-gear"></i> Pengaturan Akun
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="<?php echo $BASE; ?>/logout.php" class="logout">
+                        <i class="bi bi-box-arrow-right"></i> Keluar
+                    </a>
                 </div>
             </div>
             <?php else: ?>
