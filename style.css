@@ -9712,156 +9712,160 @@ body {
 /* ============================================================
    MENTOR GRID - WITH BORDERS
    ============================================================ */
+/* Grid 4 kolom per baris */
 .mentor-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 1.75rem;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    padding: 24px;
 }
 
+/* Card mentor lebih compact */
 .mentor-card {
-    background: white;
+    background: #fff;
     border-radius: 16px;
-    padding: 1.75rem;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    transition: all 0.3s;
-    border: 2px solid #e2e8f0;
+    padding: 20px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .mentor-card:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
-    border-color: #667eea;
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
 
-/* Mentor Header - CENTERED */
-.mentor-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-
+/* Avatar di tengah atas */
 .mentor-avatar {
-    width: 38px;                    /* sebelumnya 32px */
-    height: 38px;
-    min-width: 38px;
-    border-radius: 10px;
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ffffff;
-    font-size: 1rem;                /* sebelumnya 0.9rem */
-    font-weight: 700;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
-    margin-bottom: 0;
-    border: none;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 8px;
 }
 
-
-.mentor-info {
+.mentor-avatar img {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    height: 100%;
+    border-radius: 16px;
+    object-fit: cover;
 }
 
-.mentor-info h3 {
-    margin: 0 0 0.65rem 0;
-    font-size: 1.35rem;
-    color: #1a202c;
+/* Nama mentor */
+.mentor-card h3 {
+    margin: 0;
+    font-size: 18px;
     font-weight: 700;
+    color: #1a202c;
     text-align: center;
 }
 
-.mentor-rating {
+/* Rating badge kuning bulat */
+.mentor-rating-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 4px;
     background: #fbbf24;
-    color: white;
-    padding: 0.4rem 0.85rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
+    padding: 6px 14px;
+    border-radius: 24px;
+    font-size: 14px;
     font-weight: 700;
-    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+    color: #fff;
 }
 
-.mentor-rating i {
-    font-size: 1rem;
+.mentor-rating-badge .review-count {
+    opacity: 0.95;
+    font-weight: 600;
 }
 
-/* Mentor Details */
-.mentor-details {
-    margin-bottom: 1.25rem;
+/* Badge program studi + specialization */
+.mentor-tags {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
 }
 
 .mentor-tag {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    background: #f0f4ff;
-    padding: 0.45rem 0.9rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    color: #4c51bf;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
     font-weight: 600;
-    border: 1px solid #e0e7ff;
-}
-
-.mentor-tag i {
-    font-size: 0.9rem;
-    color: #667eea;
-}
-
-/* Mentor Price */
-.mentor-price {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #667eea;
-    margin: 1.5rem 0;
-    padding: 1.1rem;
-    background: rgba(102, 126, 234, 0.08);
-    border-radius: 14px;
     text-align: center;
+}
+
+.mentor-tag.tag-program {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.mentor-tag.tag-specialization {
+    background: #ddd6fe;
+    color: #5b21b6;
+}
+
+/* Gem/sesi prominent (background biru muda) */
+.mentor-price-prominent {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    border: 1px solid rgba(102, 126, 234, 0.15);
-}
-
-.mentor-price i {
-    font-size: 1.5rem;
-}
-
-/* Book Button */
-.mentor-card .btn-full {
-    padding: 1rem 1.5rem;
-    font-weight: 700;
-    font-size: 1rem;
+    gap: 8px;
+    padding: 14px 20px;
+    background: #e0e7ff;
     border-radius: 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    transition: all 0.3s;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
-    border: none;
-    color: white;
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
+    color: #4c51bf;
+    font-size: 18px;
+    font-weight: 700;
+    width: 100%;
 }
 
-.mentor-card .btn-full:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(102, 126, 234, 0.35);
+.mentor-price-prominent i {
+    font-size: 20px;
 }
+
+/* Button Book Session full width */
+.btn-full {
+    width: 100%;
+    text-align: center;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 12px;
+}
+
+/* Responsive: 3 kolom di tablet, 2 di mobile */
+@media (max-width: 1200px) {
+    .mentor-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .mentor-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .mentor-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 
 /* ============================================================
    EMPTY STATE

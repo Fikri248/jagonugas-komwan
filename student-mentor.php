@@ -57,6 +57,7 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -65,6 +66,7 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
     <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style-mentor.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
+
 <body>
     <?php include 'student-navbar.php'; ?>
 
@@ -77,7 +79,7 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
                         <label for="search"><i class="bi bi-search"></i> Cari Mentor</label>
                         <input type="text" id="search" name="search" placeholder="Nama atau spesialisasi..." value="<?php echo htmlspecialchars($search); ?>">
                     </div>
-                    
+
                     <div class="filter-item">
                         <label for="specialization"><i class="bi bi-lightbulb-fill"></i> Spesialisasi</label>
                         <select id="specialization" name="specialization">
@@ -89,7 +91,7 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    
+
                     <div class="filter-item">
                         <label for="min_rating"><i class="bi bi-star-fill"></i> Rating Minimum</label>
                         <select id="min_rating" name="min_rating">
@@ -98,7 +100,7 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
                             <option value="4.5" <?php echo $min_rating == 4.5 ? 'selected' : ''; ?>>4.5+ ⭐</option>
                         </select>
                     </div>
-                    
+
                     <div class="filter-item">
                         <label>&nbsp;</label>
                         <button type="submit" class="btn btn-primary">
@@ -125,44 +127,58 @@ $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
             <?php else: ?>
                 <?php foreach ($mentors as $mentor): ?>
                     <div class="mentor-card">
-                        <div class="mentor-header">
-                            <div class="mentor-avatar">
+                        <!-- Avatar -->
+                        <div class="mentor-avatar">
+                            <?php if (!empty($mentor['avatar'])): ?>
+                                <img src="<?php echo htmlspecialchars(BASE_PATH . '/' . $mentor['avatar']); ?>" alt="Avatar">
+                            <?php else: ?>
                                 <?php echo strtoupper(substr($mentor['name'], 0, 1)); ?>
-                            </div>
-                            <div class="mentor-info">
-                                <h3><?php echo htmlspecialchars($mentor['name']); ?></h3>
-                                <span class="mentor-rating">
-                                    <i class="bi bi-star-fill"></i>
-                                    <?php echo $mentor['avg_rating']; ?> (<?php echo $mentor['review_count']; ?>)
-                                </span>
-                            </div>
+                            <?php endif; ?>
                         </div>
-                        
-                        <div class="mentor-details">
-                            <span class="mentor-tag">
-                                <i class="bi bi-book-fill"></i> 
-                                <?php echo htmlspecialchars($mentor['program_studi']); ?>
+
+                        <!-- Nama -->
+                        <h3><?php echo htmlspecialchars($mentor['name']); ?></h3>
+
+                        <!-- Rating Badge -->
+                        <div class="mentor-rating-badge">
+                            <i class="bi bi-star-fill"></i>
+                            <?php echo number_format((float)$mentor['avg_rating'], 1); ?>
+                            <span class="review-count">(<?php echo (int)$mentor['review_count']; ?>)</span>
+                        </div>
+
+                        <!-- Badge Program Studi dan Specialization -->
+                        <div class="mentor-tags">
+                            <span class="mentor-tag tag-program">
+                                <i class="bi bi-journal-bookmark"></i>
+                                <?php
+                                $semester = !empty($mentor['semester']) ? 'S' . (int)$mentor['semester'] . ' ' : '';
+                                echo htmlspecialchars($semester . $mentor['program_studi']);
+                                ?>
                             </span>
-                            <?php if ($mentor['specialization']): ?>
-                                <span class="mentor-tag">
-                                    <i class="bi bi-lightbulb-fill"></i> 
+                            <?php if (!empty($mentor['specialization'])): ?>
+                                <span class="mentor-tag tag-specialization">
+                                    <i class="bi bi-lightbulb"></i>
                                     <?php echo htmlspecialchars($mentor['specialization']); ?>
                                 </span>
                             <?php endif; ?>
                         </div>
-                        
-                        <div class="mentor-price">
+
+                        <!-- Gem/sesi Prominent -->
+                        <div class="mentor-price-prominent">
                             <i class="bi bi-gem"></i>
-                            <span><?php echo number_format($mentor['hourly_rate']); ?> Gem/sesi</span>
+                            <span><?php echo number_format((int)$mentor['hourly_rate'], 0, ',', '.'); ?> Gem/sesi</span>
                         </div>
-                        
+
+                        <!-- Button Book Session -->
                         <a href="<?php echo BASE_PATH; ?>/book-session.php?mentor_id=<?php echo $mentor['id']; ?>" class="btn btn-primary btn-full">
                             <i class="bi bi-calendar-check-fill"></i> Book Session
                         </a>
                     </div>
                 <?php endforeach; ?>
+
             <?php endif; ?>
         </div>
     </div>
 </body>
+
 </html>
