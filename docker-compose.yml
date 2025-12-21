@@ -1,33 +1,50 @@
-version: "3.9"
-
 services:
   app:
-    build: .
+    # Kalau mau Jenkins yang build image di luar compose, hapus blok build ini
+    build:
+      context: .              # folder build context
+      dockerfile: Dockerfile  # nama Dockerfile
+
+    image: mrizkyardian/jagonugas-komwan:${TAG:-latest}  # TAG di-set Jenkins
     container_name: jagonugas-app
     ports:
-      - "8080:80"
+      - "${APP_PORT:-8081}:80"     # Jenkins/ENV bisa override port
     environment:
       DB_HOST: db
       DB_NAME: jagonugas_db
       DB_USER: jagonugas_user
-      DB_PASS: secretpassword
+      DB_PASS: ${DB_PASS:-secretpassword}   # SAMA dengan db.php
       DB_PORT: 3306
     depends_on:
-      - db
+      db:
+        condition: service_healthy          # tunggu DB ready
+    restart: unless-stopped
+    networks:
+      - jagonugas-net
 
   db:
     image: mysql:8.0
     container_name: jagonugas-db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASS:-rootpassword}
       MYSQL_DATABASE: jagonugas_db
       MYSQL_USER: jagonugas_user
-      MYSQL_PASSWORD: secretpassword
+      MYSQL_PASSWORD: ${DB_PASS:-secretpassword}
     volumes:
       - db_data:/var/lib/mysql
     ports:
-      - "3307:3306"
+      - "${DB_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - jagonugas-net
 
 volumes:
   db_data:
+
+networks:
+  jagonugas-net:
+    driver: bridge

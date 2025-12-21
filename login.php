@@ -3,13 +3,18 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/ModelUser.php';
 
-// config.php kamu sudah session_start(), tapi ini aman kalau dipakai ulang
+// DEBUG DEV ONLY – boleh dihapus kalau sudah beres
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// config.php kamu biasanya sudah session_start(), tapi ini aman dipakai ulang
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
 /**
- * Helper URL berbasis BASE_PATH dari config.php kamu.
+ * Helper URL berbasis BASE_PATH dari config.php.
  * Fallback ke BASEPATH supaya kompatibel dengan versi project lama.
  */
 function url_path(string $path = ''): string
@@ -30,11 +35,11 @@ function url_path(string $path = ''): string
 function redirect_by_role(string $role): void
 {
     if ($role === 'admin') {
-        header("Location: " . url_path('admin-dashboard.php'));
+        header('Location: ' . url_path('admin-dashboard.php'));
     } elseif ($role === 'mentor') {
-        header("Location: " . url_path('mentor-dashboard.php'));
+        header('Location: ' . url_path('mentor-dashboard.php'));
     } else {
-        header("Location: " . url_path('student-dashboard.php'));
+        header('Location: ' . url_path('student-dashboard.php'));
     }
     exit;
 }
@@ -45,7 +50,7 @@ if (isset($_SESSION['user_id'])) {
     redirect_by_role($role);
 }
 
-$error = '';
+$error    = '';
 $oldEmail = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -56,48 +61,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password wajib diisi.';
     } else {
         try {
-            $db = (new Database())->getConnection();
+            // Ambil koneksi PDO dari db.php
+            $db   = (new Database())->getConnection();
             $user = new User($db);
 
-            $user->email = $oldEmail;
+            $user->email    = $oldEmail;
             $user->password = $password;
 
             $loginResult = $user->login();
 
-            // Mode A: login() return array: ['success'=>bool,'user'=>...]
+            // Mode: login() return array: ['success'=>bool,'user'=>...]
             if (is_array($loginResult)) {
                 if (!empty($loginResult['success'])) {
-                    $u = $loginResult['user'] ?? [];
+                    $u    = $loginResult['user'] ?? [];
                     $role = $u['role'] ?? 'student';
 
                     // Optional: cek mentor verified (kalau fieldnya ada)
-                    if ($role === 'mentor' && array_key_exists('is_verified', $u) && !$u['is_verified']) {
+                    if (
+                        $role === 'mentor'
+                        && array_key_exists('is_verified', $u)
+                        && !$u['is_verified']
+                    ) {
                         $error = 'Akun mentor belum diverifikasi. Tunggu konfirmasi dari admin.';
                     } else {
                         session_regenerate_id(true);
 
-                        $_SESSION['user_id'] = $u['id'] ?? null;
-                        $_SESSION['name'] = $u['name'] ?? '';
-                        $_SESSION['email'] = $u['email'] ?? $oldEmail;
-                        $_SESSION['role'] = $role;
+                        $_SESSION['user_id']    = $u['id'] ?? null;
+                        $_SESSION['name']       = $u['name'] ?? '';
+                        $_SESSION['email']      = $u['email'] ?? $oldEmail;
+                        $_SESSION['role']       = $role;
                         $_SESSION['login_time'] = time();
-                        $_SESSION['avatar'] = $u['avatar'] ?? null;
+                        $_SESSION['avatar']     = $u['avatar'] ?? null;
 
                         redirect_by_role($role);
                     }
                 } else {
+                    // pesan dari ModelUser (contoh: email/password salah)
                     $error = $loginResult['message'] ?? 'Email atau password salah.';
                 }
-            }
-            // Mode B: login() return boolean (versi ModelUser lama)
-            else {
+            } else {
+                // Mode lama (kalau login() mengembalikan boolean)
                 if ($loginResult === true) {
                     session_regenerate_id(true);
 
-                    $_SESSION['user_id'] = $user->id ?? null;
-                    $_SESSION['name'] = $user->name ?? '';
-                    $_SESSION['email'] = $oldEmail;
-                    $_SESSION['role'] = $user->role ?? 'student';
+                    $_SESSION['user_id']    = $user->id ?? null;
+                    $_SESSION['name']       = $user->name ?? '';
+                    $_SESSION['email']      = $oldEmail;
+                    $_SESSION['role']       = $user->role ?? 'student';
                     $_SESSION['login_time'] = time();
 
                     redirect_by_role($_SESSION['role']);
@@ -106,7 +116,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } catch (Throwable $e) {
-            $error = 'Terjadi kesalahan server. Coba lagi nanti.';
+            // DEBUG: tampilkan pesan asli supaya tahu masalahnya apa
+            // Saat production, ubah lagi jadi pesan generic.
+            $error = 'DEBUG ERROR: ' . $e->getMessage();
+            // atau kalau mau benar-benar lihat stack trace:
+            // echo '<pre>'; var_dump($e); echo '</pre>'; exit;
         }
     }
 }
@@ -122,7 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="auth-page">
     <div class="auth-card">
         <a href="<?php echo htmlspecialchars(url_path('index.php')); ?>" class="auth-back-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Kembali
@@ -133,7 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <?php if (!empty($error)): ?>
             <div class="alert alert-error">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <line x1="15" y1="9" x2="9" y2="15"/>
                     <line x1="9" y1="9" x2="15" y2="15"/>
@@ -169,14 +185,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="form-group" style="text-align: right;">
-                <a href="<?php echo htmlspecialchars(url_path('forgot-password.php')); ?>" class="auth-link">Lupa password?</a>
+                <a href="<?php echo htmlspecialchars(url_path('forgot-password.php')); ?>" class="auth-link">
+                    Lupa password?
+                </a>
             </div>
 
             <button type="submit" class="btn btn-primary auth-button">Login</button>
         </form>
 
         <p class="auth-footer-text">
-            Belum punya akun? <a href="<?php echo htmlspecialchars(url_path('register.php')); ?>">Daftar gratis</a>
+            Belum punya akun?
+            <a href="<?php echo htmlspecialchars(url_path('register.php')); ?>">Daftar gratis</a>
         </p>
 
         <div class="auth-divider">
@@ -184,7 +203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <a href="<?php echo htmlspecialchars(url_path('mentor-login.php')); ?>" class="btn-mentor-login">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
