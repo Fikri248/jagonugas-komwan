@@ -1,45 +1,60 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    IMAGE_NAME = 'mrizkyardian/jago-nugas'          // repo Docker Hub kamu
-    REGISTRY_CREDENTIALS = 'dockerhub-credentials'  // ID credentials di Jenkins
-  }
-
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    environment {
+        DOCKER_IMAGE = "mrizkyardian/jagonugas-komwan"
+        APP_PORT     = "8081"
+        DB_PORT      = "3307"
     }
 
-    stage('Build Docker Image') {
-      steps {
-        sh "docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ."
-      }
-    }
-
-    stage('Push Docker Image') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.REGISTRY_CREDENTIALS,
-          usernameVariable: 'DOCKER_USER',
-          passwordVariable: 'DOCKER_PASS'
-        )]) {
-          sh '''
-            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-            docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_NAME}:latest
-            docker push ${IMAGE_NAME}:latest
-          '''
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
-    }
-  }
 
-  post {
-    success {
-      echo "Image ${env.IMAGE_NAME}:${env.BUILD_NUMBER} berhasil dipush, siap dipakai di Azure Web App / Container Apps."
+        stage('Build Docker image') {
+            steps {
+                sh '''
+                docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            environment {
+                DOCKERHUB_CRED = credentials('dockerhub-credentials')  // buat di Jenkins
+            }
+            steps {
+                sh '''
+                echo "${DOCKERHUB_CRED_PSW}" | docker login -u "${DOCKERHUB_CRED_USR}" --password-stdin
+                docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                docker push ${DOCKER_IMAGE}:latest
+                docker logout
+                '''
+            }
+        }
+
+        stage('Deploy with docker compose') {
+            steps {
+                sh '''
+                export TAG=${BUILD_NUMBER}
+                export APP_PORT=${APP_PORT}
+                export DB_PORT=${DB_PORT}
+
+                docker compose down
+                docker compose pull || true
+                docker compose up -d
+                '''
+            }
+        }
     }
-  }
+
+    post {
+        always {
+            sh 'docker image prune -f || true'
+        }
+    }
 }
