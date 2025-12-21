@@ -21,7 +21,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$userId = (int)$_SESSION['user_id'];
+$userId    = (int)$_SESSION['user_id'];
 $loginTime = (int)($_SESSION['login_time'] ?? time());
 
 // Koneksi PDO
@@ -33,8 +33,8 @@ try {
 }
 
 $currentUser = null;
-$gemBalance = 0;
-$name = 'User';
+$gemBalance  = 0;
+$name        = 'User';
 
 $successMsg = '';
 if (isset($_GET['profile_updated'])) {
@@ -56,15 +56,15 @@ if ($pdo) {
 
         if ($currentUser) {
             $gemBalance = (int)($currentUser['gems'] ?? 0);
-            $name = (string)($currentUser['name'] ?? 'User');
+            $name       = (string)($currentUser['name'] ?? 'User');
         }
     } catch (Throwable $e) {
         $gemBalance = (int)($_SESSION['gems'] ?? 0);
-        $name = (string)($_SESSION['name'] ?? 'User');
+        $name       = (string)($_SESSION['name'] ?? 'User');
     }
 } else {
     $gemBalance = (int)($_SESSION['gems'] ?? 0);
-    $name = (string)($_SESSION['name'] ?? 'User');
+    $name       = (string)($_SESSION['name'] ?? 'User');
 }
 
 $activeSeconds = time() - $loginTime;
@@ -75,7 +75,7 @@ function formatActiveTime(int $seconds): string {
 
     $roundedMinutes = (int)(floor($minutes / 5) * 5);
     $hours = (int)floor($roundedMinutes / 60);
-    $mins = $roundedMinutes % 60;
+    $mins  = $roundedMinutes % 60;
 
     if ($hours > 0) {
         return $mins > 0 ? $hours . ' jam ' . $mins . ' menit' : $hours . ' jam';
@@ -85,7 +85,7 @@ function formatActiveTime(int $seconds): string {
 $activeTimeFormatted = formatActiveTime($activeSeconds);
 
 function time_elapsed(string $datetime): string {
-    $tz = new DateTimeZone('Asia/Jakarta');
+    $tz  = new DateTimeZone('Asia/Jakarta');
     $now = new DateTime('now', $tz);
 
     try {
@@ -102,7 +102,7 @@ function time_elapsed(string $datetime): string {
 }
 
 // Stats Forum
-$totalReplies = 0;
+$totalReplies    = 0;
 $totalGemsEarned = 0;
 
 if ($pdo) {
@@ -130,10 +130,10 @@ if ($pdo) {
 }
 
 // ===== MENTOR BOOKING STATS =====
-$active_sessions = 0;
-$pending_sessions = 0;
+$active_sessions    = 0;
+$pending_sessions   = 0;
 $completed_sessions = 0;
-$need_rating = 0;
+$need_rating        = 0;
 
 if ($pdo) {
     try {
@@ -204,7 +204,7 @@ if ($pdo) {
 // Pertanyaan mahasiswa lain
 $recentQuestionsLimit = !empty($myQuestions) ? 3 : 1;
 $recentQuestionsLimit = max(1, min(10, (int)$recentQuestionsLimit));
-$recentQuestions = [];
+$recentQuestions      = [];
 
 if ($pdo) {
     try {
@@ -223,16 +223,32 @@ if ($pdo) {
     } catch (Throwable $e) {}
 }
 
-// Mentor populer
+// ===== MENTOR POPULER (dari tabel users, rating >= 4.5) =====
 $popularMentors = [];
 if ($pdo) {
     try {
         $stmt = $pdo->query("
-            SELECT m.*, u.name, u.avatar
-            FROM mentors m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.is_verified = 1
-            ORDER BY m.rating DESC
+            SELECT
+                id,
+                name,
+                avatar,
+                specialization,
+                program_studi,
+                hourly_rate,
+                is_verified,
+                total_rating,
+                review_count,
+                CASE
+                    WHEN review_count > 0
+                    THEN ROUND(total_rating / review_count, 1)
+                    ELSE 0
+                END AS rating
+            FROM users
+            WHERE role = 'mentor'
+              AND is_verified = 1
+              AND review_count > 0
+              AND (total_rating / review_count) >= 4.5
+            ORDER BY rating DESC
             LIMIT 3
         ");
         $popularMentors = $stmt->fetchAll();
@@ -396,8 +412,7 @@ if ($pdo) {
         </section>
         <?php endif; ?>
     </main>
-
-    <!-- Sidebar -->
+ <!-- Sidebar -->
     <aside class="dash-sidebar">
         <div class="dash-sidebar-card">
             <h3>Menu Cepat</h3>
@@ -417,15 +432,15 @@ if ($pdo) {
             </div>
         </div>
 
-        <div class="dash-sidebar-card">
+       <div class="dash-sidebar-card">
             <h3>Mentor Populer</h3>
             <div class="dash-mentor-list">
                 <?php if (empty($popularMentors)): ?>
                     <?php
                     $dummyMentors = [
                         ['name' => 'Ahmad Wijaya', 'expertise' => 'Pemrograman', 'rating' => 4.9],
-                        ['name' => 'Siti Rahma', 'expertise' => 'Database', 'rating' => 4.8],
-                        ['name' => 'Budi Santoso', 'expertise' => 'Jaringan', 'rating' => 4.7],
+                        ['name' => 'Siti Rahma',  'expertise' => 'Database',    'rating' => 4.8],
+                        ['name' => 'Budi Santoso','expertise' => 'Jaringan',    'rating' => 4.7],
                     ];
                     foreach ($dummyMentors as $mentor):
                     ?>
@@ -435,7 +450,9 @@ if ($pdo) {
                             <span class="name"><?php echo htmlspecialchars($mentor['name']); ?></span>
                             <span class="expertise"><?php echo htmlspecialchars($mentor['expertise']); ?></span>
                         </div>
-                        <div class="dash-mentor-rating"><i class="bi bi-star-fill"></i> <?php echo htmlspecialchars((string)$mentor['rating']); ?></div>
+                        <div class="dash-mentor-rating">
+                            <i class="bi bi-star-fill"></i> <?php echo htmlspecialchars((string)$mentor['rating']); ?>
+                        </div>
                     </div>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -450,15 +467,22 @@ if ($pdo) {
                         </div>
                         <div class="dash-mentor-info">
                             <span class="name"><?php echo htmlspecialchars((string)$mentor['name']); ?></span>
-                            <span class="expertise"><?php echo htmlspecialchars((string)($mentor['specialization'] ?? $mentor['expertise'] ?? '')); ?></span>
+                            <span class="expertise">
+                                <?php echo htmlspecialchars((string)($mentor['specialization'] ?? '')); ?>
+                            </span>
                         </div>
-                        <div class="dash-mentor-rating"><i class="bi bi-star-fill"></i> <?php echo number_format((float)($mentor['rating'] ?? 0), 1); ?></div>
+                        <div class="dash-mentor-rating">
+                            <i class="bi bi-star-fill"></i>
+                            <?php echo number_format((float)($mentor['rating'] ?? 0), 1); ?>
+                        </div>
                     </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
 
-            <a href="<?php echo htmlspecialchars($BASE); ?>/student-mentor.php" class="btn btn-outline btn-full btn-sm">Lihat Semua Mentor</a>
+            <a href="<?php echo htmlspecialchars($BASE); ?>/student-mentor.php" class="btn btn-outline btn-full btn-sm">
+                Lihat Semua Mentor
+            </a>
         </div>
     </aside>
 </div>
