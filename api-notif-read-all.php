@@ -7,7 +7,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+/** @var PDOStatement|false $stmt */
 $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0");
-$success = $stmt->execute([$_SESSION['user_id']]);
+$success = $stmt ? $stmt->execute([$_SESSION['user_id']]) : false;
 
 echo json_encode(['success' => $success]);

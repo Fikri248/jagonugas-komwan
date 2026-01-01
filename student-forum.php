@@ -3,10 +3,8 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
-// Defensive: fallback kalau BASE_PATH ga ke-define
 $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
 
-// Session check
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -14,12 +12,20 @@ if (session_status() === PHP_SESSION_NONE) {
 $userId = $_SESSION['user_id'] ?? null;
 $name = $_SESSION['name'] ?? 'Guest';
 
-// Database connection
 $pdo = null;
 try {
     $pdo = (new Database())->getConnection();
 } catch (Exception $e) {
     die("Database connection failed: " . $e->getMessage());
+}
+
+// Helper function untuk avatar URL (handle Google avatar)
+if (!function_exists('get_avatar_url')) {
+    function get_avatar_url($avatar, $base = '') {
+        if (empty($avatar)) return '';
+        if (filter_var($avatar, FILTER_VALIDATE_URL)) return $avatar;
+        return $base . '/' . ltrim($avatar, '/');
+    }
 }
 
 // Filter
@@ -94,7 +100,6 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $threads = $stmt->fetchAll();
 
-// Helper function
 function time_elapsed($datetime) {
     $tz = new DateTimeZone('Asia/Jakarta');
     $now = new DateTime('now', $tz);
@@ -133,8 +138,120 @@ if (isset($_GET['deleted'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Forum Diskusi <?php echo $currentCategory ? '- ' . $currentCategory['name'] : ''; ?> - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        /* ===== RESET & BASE ===== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background: #f8fafc; min-height: 100vh; }
+        
+        /* ===== FORUM PAGE ===== */
+        .forum-page { background: #f8fafc; min-height: 100vh; }
+        
+        .forum-container { max-width: 1400px; margin: 0 auto; padding: 32px 24px; display: grid; grid-template-columns: 280px 1fr; gap: 32px; }
+        
+        /* ===== BUTTONS ===== */
+        .btn { padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 0.95rem; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
+        .btn-outline { border: 2px solid #e2e8f0; color: #475569; background: white; }
+        .btn-outline:hover { border-color: #667eea; color: #667eea; }
+        .btn-full { width: 100%; justify-content: center; }
+        
+        /* ===== ALERTS ===== */
+        .alert { padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px; }
+        .alert-success { background: linear-gradient(135deg, #f0fdf4, #dcfce7); color: #16a34a; border: 1px solid #bbf7d0; }
+        
+        /* ===== FORUM SIDEBAR ===== */
+        .forum-sidebar { display: flex; flex-direction: column; gap: 20px; }
+        .forum-sidebar-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
+        .forum-sidebar-card h3 { font-size: 1rem; color: #1e293b; margin-bottom: 16px; font-weight: 600; }
+        
+        .forum-category-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+        .forum-category-list a { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; text-decoration: none; color: #475569; font-weight: 500; transition: all 0.2s; }
+        .forum-category-list a:hover { background: #f1f5f9; color: #1e293b; }
+        .forum-category-list a.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .forum-category-list a i { font-size: 1.1rem; width: 24px; text-align: center; }
+        
+        /* ===== FORUM MAIN ===== */
+        .forum-main { min-width: 0; }
+        
+        .forum-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 20px; }
+        .forum-header-left h1 { font-size: 1.75rem; color: #1e293b; margin-bottom: 4px; }
+        .forum-header-left p { color: #64748b; font-size: 0.95rem; }
+        
+        .forum-search { position: relative; min-width: 300px; }
+        .forum-search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+        .forum-search input { width: 100%; padding: 12px 16px 12px 42px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 0.9rem; transition: all 0.2s; outline: none; }
+        .forum-search input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        
+        /* ===== FORUM FILTERS ===== */
+        .forum-filters { display: flex; gap: 8px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
+        .forum-filter { display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 50px; text-decoration: none; color: #64748b; font-size: 0.9rem; font-weight: 500; background: white; border: 1px solid #e2e8f0; transition: all 0.2s; }
+        .forum-filter:hover { border-color: #667eea; color: #667eea; }
+        .forum-filter.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: transparent; }
+        
+        /* ===== FORUM THREAD LIST ===== */
+        .forum-thread-list { display: flex; flex-direction: column; gap: 16px; }
+        
+        .forum-thread-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); display: flex; gap: 20px; transition: all 0.2s; border: 1px solid #e2e8f0; }
+        .forum-thread-card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.08); transform: translateY(-2px); }
+        .forum-thread-card.solved { border-left: 4px solid #10b981; }
+        
+        .forum-thread-votes { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 70px; padding: 12px; background: #f8fafc; border-radius: 12px; text-align: center; }
+        .forum-thread-votes .vote-count { font-size: 1.5rem; font-weight: 700; color: #1e293b; }
+        .forum-thread-votes .vote-label { font-size: 0.75rem; color: #64748b; }
+        
+        .forum-thread-content { flex: 1; min-width: 0; }
+        
+        .forum-thread-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .forum-thread-category { padding: 4px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+        .forum-thread-solved { display: flex; align-items: center; gap: 4px; color: #10b981; font-size: 0.8rem; font-weight: 600; }
+        .forum-thread-reward { display: flex; align-items: center; gap: 4px; color: #8b5cf6; font-size: 0.8rem; font-weight: 600; }
+        
+        .forum-thread-title { margin-bottom: 8px; }
+        .forum-thread-title a { font-size: 1.1rem; font-weight: 600; color: #1e293b; text-decoration: none; transition: color 0.2s; }
+        .forum-thread-title a:hover { color: #667eea; }
+        
+        .forum-thread-excerpt { color: #64748b; font-size: 0.9rem; line-height: 1.6; margin-bottom: 12px; }
+        
+        .forum-thread-footer { display: flex; justify-content: space-between; align-items: center; }
+        .forum-thread-author { display: flex; align-items: center; gap: 10px; }
+        
+        /* Forum Avatar */
+        .forum-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.7rem; flex-shrink: 0; overflow: hidden; }
+        .forum-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        
+        .forum-thread-author span { font-size: 0.85rem; color: #475569; font-weight: 500; }
+        
+        .forum-thread-stats { display: flex; gap: 16px; font-size: 0.8rem; color: #94a3b8; }
+        .forum-thread-stats span { display: flex; align-items: center; gap: 4px; }
+        
+        /* ===== FORUM EMPTY STATE ===== */
+        .forum-empty { text-align: center; padding: 60px 20px; background: white; border-radius: 16px; border: 2px dashed #e2e8f0; }
+        .forum-empty i { font-size: 4rem; color: #cbd5e1; margin-bottom: 16px; display: block; }
+        .forum-empty h3 { color: #1e293b; margin-bottom: 8px; font-size: 1.25rem; }
+        .forum-empty p { color: #64748b; margin-bottom: 20px; }
+        
+        /* ===== FORUM PAGINATION ===== */
+        .forum-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0; }
+        .pagination-btn { display: flex; align-items: center; gap: 6px; padding: 10px 20px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; color: #475569; text-decoration: none; font-weight: 500; transition: all 0.2s; }
+        .pagination-btn:hover { border-color: #667eea; color: #667eea; }
+        .pagination-info { color: #64748b; font-size: 0.9rem; }
+        
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .forum-container { grid-template-columns: 1fr; }
+            .forum-sidebar { display: none; }
+        }
+        
+        @media (max-width: 768px) {
+            .forum-container { padding: 20px 16px; }
+            .forum-header { flex-direction: column; }
+            .forum-search { min-width: 100%; }
+            .forum-thread-card { flex-direction: column; }
+            .forum-thread-votes { flex-direction: row; justify-content: flex-start; gap: 8px; min-width: auto; }
+        }
+    </style>
 </head>
 <body class="forum-page">
     <?php include __DIR__ . '/student-navbar.php'; ?>
@@ -200,7 +317,7 @@ if (isset($_GET['deleted'])) {
                     <p>
                         <?php 
                         if ($filter === 'my') {
-                            echo 'Daftar pertanyaan yang sudah lo ajukan';
+                            echo 'Daftar pertanyaan yang sudah kamu ajukan';
                         } elseif ($currentCategory) {
                             echo htmlspecialchars($currentCategory['description']);
                         } else {
@@ -292,9 +409,10 @@ if (isset($_GET['deleted'])) {
                             
                             <div class="forum-thread-footer">
                                 <div class="forum-thread-author">
-                                    <div class="forum-avatar sm">
-                                        <?php if (!empty($thread['author_avatar'])): ?>
-                                            <img src="<?php echo $BASE . '/' . htmlspecialchars($thread['author_avatar']); ?>" alt="Avatar">
+                                    <div class="forum-avatar">
+                                        <?php $avatarUrl = get_avatar_url($thread['author_avatar'], $BASE); ?>
+                                        <?php if ($avatarUrl): ?>
+                                            <img src="<?php echo htmlspecialchars($avatarUrl); ?>" alt="" referrerpolicy="no-referrer">
                                         <?php else: ?>
                                             <?php echo strtoupper(substr($thread['author_name'], 0, 1)); ?>
                                         <?php endif; ?>

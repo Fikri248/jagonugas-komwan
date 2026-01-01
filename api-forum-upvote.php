@@ -20,14 +20,18 @@ if (!$replyId) {
 }
 
 try {
-    // Get reply info (untuk notifikasi)
+    // Get reply info
+    /** @var PDOStatement|false $stmt */
     $stmt = $pdo->prepare("
         SELECT fr.user_id as reply_owner_id, fr.thread_id, ft.title as thread_title
         FROM forum_replies fr
         JOIN forum_threads ft ON fr.thread_id = ft.id
         WHERE fr.id = ?
     ");
+    if (!$stmt) throw new Exception('Prepare failed');
     $stmt->execute([$replyId]);
+    
+    /** @var array|false $replyInfo */
     $replyInfo = $stmt->fetch();
     
     if (!$replyInfo) {
@@ -36,22 +40,24 @@ try {
     }
     
     // Check if already upvoted
+    /** @var PDOStatement|false $stmt */
     $stmt = $pdo->prepare("SELECT id FROM forum_upvotes WHERE user_id = ? AND reply_id = ?");
+    if (!$stmt) throw new Exception('Prepare failed');
     $stmt->execute([$userId, $replyId]);
     $exists = $stmt->fetch();
     
     if ($exists) {
         // Remove upvote
-        $pdo->prepare("DELETE FROM forum_upvotes WHERE user_id = ? AND reply_id = ?")->execute([$userId, $replyId]);
-        $pdo->prepare("UPDATE forum_replies SET upvotes = upvotes - 1 WHERE id = ?")->execute([$replyId]);
+        $pdo->prepare("DELETE FROM forum_upvotes WHERE user_id = ? AND reply_id = ?")?->execute([$userId, $replyId]);
+        $pdo->prepare("UPDATE forum_replies SET upvotes = upvotes - 1 WHERE id = ?")?->execute([$replyId]);
         $upvoted = false;
     } else {
         // Add upvote
-        $pdo->prepare("INSERT INTO forum_upvotes (user_id, reply_id) VALUES (?, ?)")->execute([$userId, $replyId]);
-        $pdo->prepare("UPDATE forum_replies SET upvotes = upvotes + 1 WHERE id = ?")->execute([$replyId]);
+        $pdo->prepare("INSERT INTO forum_upvotes (user_id, reply_id) VALUES (?, ?)")?->execute([$userId, $replyId]);
+        $pdo->prepare("UPDATE forum_replies SET upvotes = upvotes + 1 WHERE id = ?")?->execute([$replyId]);
         $upvoted = true;
         
-        // Kirim notifikasi ke pemilik reply (jika bukan diri sendiri)
+        // Kirim notifikasi
         if ($replyInfo['reply_owner_id'] != $userId) {
             $notif = new NotificationHelper($pdo);
             $notif->create(
@@ -65,11 +71,13 @@ try {
     }
     
     // Get new count
+    /** @var PDOStatement|false $stmt */
     $stmt = $pdo->prepare("SELECT upvotes FROM forum_replies WHERE id = ?");
+    if (!$stmt) throw new Exception('Prepare failed');
     $stmt->execute([$replyId]);
     $count = $stmt->fetchColumn();
     
-    echo json_encode(['success' => true, 'upvoted' => $upvoted, 'count' => $count]);
+    echo json_encode(['success' => true, 'upvoted' => $upvoted, 'count' => (int)$count]);
     
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);

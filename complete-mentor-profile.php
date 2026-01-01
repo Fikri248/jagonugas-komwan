@@ -1,4 +1,8 @@
 <?php
+// complete-mentor-profile.php
+// Halaman khusus untuk mentor yang daftar via Google melengkapi profil
+declare(strict_types=1);
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/ModelUser.php';
@@ -19,11 +23,23 @@ function url_path(string $path = ''): string
     return $base . ($path === '/' ? '' : $path);
 }
 
+// Cek apakah ada Google prefill data
+$googlePrefill = $_SESSION['google_prefill_mentor'] ?? null;
+
+if (!$googlePrefill) {
+    // Tidak ada data Google, redirect ke mentor-register biasa
+    header('Location: ' . url_path('mentor-register.php'));
+    exit;
+}
+
 $error = '';
 $success = '';
 
-// Cek apakah dari Google OAuth (prefill data)
-$googlePrefill = $_SESSION['google_prefill_mentor'] ?? null;
+$prefillName = $googlePrefill['name'] ?? '';
+$prefillEmail = $googlePrefill['email'] ?? '';
+$prefillGoogleId = $googlePrefill['google_id'] ?? '';
+$prefillAvatar = $googlePrefill['avatar'] ?? '';
+$existingUserId = $googlePrefill['user_id'] ?? null; // Untuk upgrade existing student ke mentor
 
 $programStudiList = [
     'S1 Informatika',
@@ -73,26 +89,16 @@ function is_allowed_mime(string $mime): bool
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = (string)($_POST['password'] ?? '');
-    $confirmPassword = (string)($_POST['confirm_password'] ?? '');
     $programStudi = trim($_POST['program_studi'] ?? '');
     $semester = (int)($_POST['semester'] ?? 0);
     $expertise = $_POST['expertise'] ?? [];
     $bio = trim($_POST['bio'] ?? '');
-    $googleId = $_POST['google_id'] ?? null;
-    $avatar = $_POST['avatar'] ?? null;
 
     // Validasi
-    if ($name === '' || $email === '' || $programStudi === '' || $semester < 3) {
-        $error = 'Semua field wajib diisi. Mentor minimal semester 3.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Format email tidak valid';
-    } elseif (empty($googleId) && strlen($password) < 6) {
-        $error = 'Password minimal 6 karakter';
-    } elseif (empty($googleId) && $password !== $confirmPassword) {
-        $error = 'Konfirmasi password tidak cocok';
+    if ($programStudi === '' || $semester < 3) {
+        $error = 'Program studi dan semester wajib diisi. Mentor minimal semester 3.';
+    } elseif (!in_array($programStudi, $programStudiList, true)) {
+        $error = 'Program studi tidak valid';
     } elseif (!is_array($expertise) || empty($expertise)) {
         $error = 'Pilih minimal 1 keahlian';
     } elseif (!isset($_FILES['transkrip']) || ($_FILES['transkrip']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
@@ -138,15 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $db = (new Database())->getConnection();
                         $user = new User($db);
 
-                        $user->name = $name;
-                        $user->email = $email;
-                        $user->password = !empty($googleId) ? bin2hex(random_bytes(16)) : $password;
+                        $user->name = $prefillName;
+                        $user->email = $prefillEmail;
+                        $user->password = bin2hex(random_bytes(16)); // Random password for Google users
                         $user->programstudi = $programStudi;
                         $user->program_studi = $programStudi;
                         $user->semester = $semester;
                         $user->role = 'mentor';
-                        $user->google_id = $googleId;
-                        $user->avatar = $avatar;
+                        $user->google_id = $prefillGoogleId;
+                        $user->avatar = $prefillAvatar;
 
                         if (!method_exists($user, 'registerMentor')) {
                             @unlink($destinationAbs);
@@ -171,20 +177,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-// Prefill values
-$prefillName = $googlePrefill['name'] ?? ($_POST['name'] ?? '');
-$prefillEmail = $googlePrefill['email'] ?? ($_POST['email'] ?? '');
-$prefillGoogleId = $googlePrefill['google_id'] ?? '';
-$prefillAvatar = $googlePrefill['avatar'] ?? '';
-$isGoogleRegister = !empty($prefillGoogleId);
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daftar Mentor - JagoNugas</title>
+    <title>Lengkapi Profil Mentor - JagoNugas</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background: #f7fafc; }
@@ -199,7 +198,25 @@ $isGoogleRegister = !empty($prefillGoogleId);
         .auth-back-btn { display: inline-flex; align-items: center; gap: 8px; color: #64748b; text-decoration: none; font-size: 0.9rem; font-weight: 500; margin-bottom: 16px; padding: 8px 12px; border-radius: 8px; transition: all 0.2s ease; }
         .auth-back-btn:hover { color: #10b981; background: rgba(16,185,129,0.08); transform: translateX(-2px); }
 
-        .auth-badge-mentor { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; margin-bottom: 16px; }
+        /* Step Indicator */
+        .step-indicator { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; }
+        .step { display: flex; align-items: center; gap: 8px; }
+        .step-number { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
+        .step-number.completed { background: #10b981; color: white; }
+        .step-number.active { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
+        .step-number.pending { background: #e2e8f0; color: #94a3b8; }
+        .step-text { font-size: 0.85rem; color: #64748b; font-weight: 500; }
+        .step-text.active { color: #059669; font-weight: 600; }
+        .step-line { width: 40px; height: 2px; background: #e2e8f0; }
+        .step-line.completed { background: #10b981; }
+
+        /* Google User Card */
+        .google-user-card { display: flex; align-items: center; gap: 16px; padding: 20px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 16px; margin-bottom: 24px; border: 1px solid #bbf7d0; }
+        .google-user-avatar { width: 56px; height: 56px; border-radius: 50%; border: 3px solid #10b981; }
+        .google-user-info { flex: 1; }
+        .google-user-name { font-size: 1.1rem; font-weight: 700; color: #166534; }
+        .google-user-email { font-size: 0.9rem; color: #15803d; }
+        .google-verified { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.8rem; color: #16a34a; font-weight: 500; }
 
         .auth-form { display: flex; flex-direction: column; gap: 16px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -211,7 +228,6 @@ $isGoogleRegister = !empty($prefillGoogleId);
         .auth-input::placeholder { color: #94a3b8; }
         .auth-input:hover { border-color: #cbd5e1; background: #ffffff; }
         .auth-input:focus { border-color: #10b981; background: #ffffff; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
-        .auth-input:read-only { background: #e2e8f0; cursor: not-allowed; }
         
         .auth-textarea { min-height: 100px; resize: vertical; }
 
@@ -220,21 +236,6 @@ $isGoogleRegister = !empty($prefillGoogleId);
         .alert-error { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); color: #dc2626; border: 1px solid #fecaca; }
         .alert-success { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); color: #16a34a; border: 1px solid #bbf7d0; }
         .alert.fade-out { opacity: 0; transform: translateY(-10px); }
-
-        /* Google Button */
-        .btn-google { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px 20px; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 12px; color: #1f2937; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-decoration: none; margin-bottom: 8px; }
-        .btn-google:hover { border-color: #4285f4; background: #f8fafc; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(66,133,244,0.15); }
-
-        .auth-divider { display: flex; align-items: center; margin: 20px 0; }
-        .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
-        .auth-divider span { padding: 0 16px; color: #94a3b8; font-size: 0.85rem; }
-
-        /* Google Prefill Info */
-        .google-info { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 12px; margin-bottom: 16px; border: 1px solid #bfdbfe; }
-        .google-info img { width: 40px; height: 40px; border-radius: 50%; }
-        .google-info-text { flex: 1; }
-        .google-info-name { font-weight: 600; color: #1e40af; }
-        .google-info-email { font-size: 0.85rem; color: #3b82f6; }
 
         /* Custom Select */
         .custom-select { position: relative; width: 100%; font-size: 0.95rem; user-select: none; }
@@ -283,10 +284,14 @@ $isGoogleRegister = !empty($prefillGoogleId);
         .btn-mentor:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(16,185,129,0.3); }
 
         /* Pending Verification */
-        .pending-verification { text-align: center; padding: 24px; background: #f0fdf4; border-radius: 16px; margin-top: 16px; }
-        .pending-icon { display: inline-block; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-bottom: 12px; }
-        .pending-verification h3 { color: #059669; margin-bottom: 8px; }
-        .pending-verification p { color: #64748b; font-size: 0.9rem; margin-bottom: 16px; }
+        .pending-verification { text-align: center; padding: 32px 24px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 16px; margin-top: 16px; }
+        .pending-icon { font-size: 3rem; margin-bottom: 16px; }
+        .pending-badge { display: inline-block; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; padding: 8px 20px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; margin-bottom: 16px; }
+        .pending-verification h3 { color: #059669; margin-bottom: 8px; font-size: 1.25rem; }
+        .pending-verification p { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.7; }
+        .pending-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn-outline { background: transparent; border: 2px solid #10b981; color: #059669; }
+        .btn-outline:hover { background: #f0fdf4; }
 
         .auth-footer-text { font-size: 0.9rem; color: #4a5568; margin-top: 20px; text-align: center; }
         .auth-footer-text a { color: #10b981; font-weight: 600; text-decoration: none; }
@@ -296,30 +301,40 @@ $isGoogleRegister = !empty($prefillGoogleId);
             .form-row { grid-template-columns: 1fr; }
             .auth-card { padding: 24px 20px; }
             .expertise-grid { grid-template-columns: 1fr 1fr; }
+            .step-text { display: none; }
+            .pending-actions { flex-direction: column; }
         }
     </style>
 </head>
 <body class="auth-page">
     <div class="auth-card">
-        <a href="<?php echo htmlspecialchars(url_path('index.php')); ?>" class="auth-back-btn">
+        <a href="<?php echo htmlspecialchars(url_path('mentor-register.php')); ?>" class="auth-back-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Kembali
         </a>
 
-        <div class="auth-badge-mentor">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Daftar Mentor
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+            <div class="step">
+                <div class="step-number completed">✓</div>
+                <span class="step-text">Google Account</span>
+            </div>
+            <div class="step-line completed"></div>
+            <div class="step">
+                <div class="step-number active">2</div>
+                <span class="step-text active">Lengkapi Profil</span>
+            </div>
+            <div class="step-line"></div>
+            <div class="step">
+                <div class="step-number pending">3</div>
+                <span class="step-text">Verifikasi Admin</span>
+            </div>
         </div>
 
-        <h1 class="auth-title">Jadi Mentor JagoNugas</h1>
-        <p class="auth-subtitle">Bantu adik tingkat dan dapatkan penghasilan tambahan</p>
+        <h1 class="auth-title">Lengkapi Profil Mentor</h1>
+        <p class="auth-subtitle">Satu langkah lagi untuk jadi mentor JagoNugas!</p>
 
         <?php if (!empty($error)): ?>
             <div class="alert alert-error" id="alert-error">
@@ -333,80 +348,47 @@ $isGoogleRegister = !empty($prefillGoogleId);
         <?php endif; ?>
 
         <?php if (!empty($success)): ?>
-            <div class="alert alert-success" id="alert-success">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-                <?php echo htmlspecialchars($success); ?>
-            </div>
-
             <div class="pending-verification">
-                <div class="pending-icon">⏳ PENDING</div>
-                <h3>Menunggu Verifikasi</h3>
-                <p>Tim admin sedang mereview transkrip nilai kamu. Kamu akan menerima notifikasi setelah akun diverifikasi.</p>
-                <a href="<?php echo htmlspecialchars(url_path('mentor-login.php')); ?>" class="btn btn-mentor">Cek Status Login</a>
-            </div>
-        <?php else: ?>
-
-        <?php if (!$isGoogleRegister): ?>
-            <!-- Google Sign Up Button -->
-            <a href="<?php echo htmlspecialchars(url_path('google-auth.php?action=mentor-register')); ?>" class="btn-google">
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Daftar dengan Google
-            </a>
-
-            <div class="auth-divider">
-                <span>atau daftar manual</span>
-            </div>
-        <?php else: ?>
-            <!-- Google Prefill Info -->
-            <div class="google-info">
-                <?php if ($prefillAvatar): ?>
-                    <img src="<?php echo htmlspecialchars($prefillAvatar); ?>" alt="Avatar">
-                <?php endif; ?>
-                <div class="google-info-text">
-                    <div class="google-info-name"><?php echo htmlspecialchars($prefillName); ?></div>
-                    <div class="google-info-email"><?php echo htmlspecialchars($prefillEmail); ?></div>
+                <div class="pending-icon">🎉</div>
+                <div class="pending-badge">⏳ MENUNGGU VERIFIKASI</div>
+                <h3>Pendaftaran Berhasil!</h3>
+                <p>
+                    Terima kasih sudah mendaftar sebagai mentor.<br>
+                    Tim admin sedang mereview transkrip nilai kamu.<br>
+                    Kamu akan menerima notifikasi setelah akun diverifikasi (1x24 jam).
+                </p>
+                <div class="pending-actions">
+                    <a href="<?php echo htmlspecialchars(url_path('mentor-login.php')); ?>" class="btn btn-mentor">Cek Status Login</a>
+                    <a href="<?php echo htmlspecialchars(url_path('index.php')); ?>" class="btn btn-outline">Kembali ke Beranda</a>
                 </div>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#34A853">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                </svg>
             </div>
-        <?php endif; ?>
+        <?php else: ?>
+
+        <!-- Google User Card -->
+        <div class="google-user-card">
+            <?php if ($prefillAvatar): ?>
+                <img src="<?php echo htmlspecialchars($prefillAvatar); ?>" alt="Avatar" class="google-user-avatar">
+            <?php else: ?>
+                <div class="google-user-avatar" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.5rem;">
+                    <?php echo strtoupper(substr($prefillName, 0, 1)); ?>
+                </div>
+            <?php endif; ?>
+            <div class="google-user-info">
+                <div class="google-user-name"><?php echo htmlspecialchars($prefillName); ?></div>
+                <div class="google-user-email"><?php echo htmlspecialchars($prefillEmail); ?></div>
+                <div class="google-verified">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    Terverifikasi via Google
+                </div>
+            </div>
+        </div>
 
         <form method="POST" class="auth-form" enctype="multipart/form-data">
-            <?php if ($isGoogleRegister): ?>
-                <input type="hidden" name="google_id" value="<?php echo htmlspecialchars($prefillGoogleId); ?>">
-                <input type="hidden" name="avatar" value="<?php echo htmlspecialchars($prefillAvatar); ?>">
-            <?php endif; ?>
-
             <div class="form-row">
                 <div class="form-group">
-                    <label for="name">Nama Lengkap</label>
-                    <input type="text" id="name" name="name" class="auth-input" 
-                        value="<?php echo htmlspecialchars($prefillName); ?>" 
-                        placeholder="Masukkan nama lengkap" 
-                        <?php echo $isGoogleRegister ? 'readonly' : ''; ?> required>
-                </div>
-
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" class="auth-input" 
-                        value="<?php echo htmlspecialchars($prefillEmail); ?>" 
-                        placeholder="email@telkomuniversity.ac.id" 
-                        <?php echo $isGoogleRegister ? 'readonly' : ''; ?> required>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Program Studi</label>
+                    <label>Program Studi <span class="required">*</span></label>
                     <div class="custom-select" data-name="program_studi">
                         <div class="select-selected">
                             <span class="select-text <?php echo !empty($_POST['program_studi']) ? 'has-value' : ''; ?>">
@@ -426,7 +408,7 @@ $isGoogleRegister = !empty($prefillGoogleId);
                 </div>
 
                 <div class="form-group">
-                    <label>Semester (min. 3)</label>
+                    <label>Semester <span class="required">*</span> <small>(min. 3)</small></label>
                     <div class="custom-select" data-name="semester">
                         <div class="select-selected">
                             <span class="select-text <?php echo !empty($_POST['semester']) ? 'has-value' : ''; ?>">
@@ -461,7 +443,7 @@ $isGoogleRegister = !empty($prefillGoogleId);
                         <p class="upload-text">Drag & drop file di sini atau <span class="upload-browse">browse</span></p>
                         <p class="upload-hint">Format: PDF, JPG, PNG (Maks. 5MB)</p>
                     </div>
-                    <div class="upload-preview" id="uploadPreview">
+                    <div class="upload-preview">
                         <div class="preview-icon">FILE</div>
                         <div class="preview-info">
                             <span class="preview-name" id="previewName"></span>
@@ -470,11 +452,11 @@ $isGoogleRegister = !empty($prefillGoogleId);
                         <button type="button" class="preview-remove" id="removeFile">✕</button>
                     </div>
                 </div>
-                <p class="form-hint">Transkrip nilai akan direview oleh admin untuk verifikasi kemampuan akademik</p>
+                <p class="form-hint">Transkrip nilai untuk memverifikasi kemampuan akademik kamu</p>
             </div>
 
             <div class="form-group">
-                <label>Keahlian (pilih yang dikuasai)</label>
+                <label>Keahlian <span class="required">*</span> <small>(pilih yang dikuasai)</small></label>
                 <div class="expertise-grid">
                     <?php foreach ($expertiseList as $exp): ?>
                         <label class="expertise-item">
@@ -487,23 +469,16 @@ $isGoogleRegister = !empty($prefillGoogleId);
 
             <div class="form-group">
                 <label for="bio">Bio Singkat</label>
-                <textarea id="bio" name="bio" class="auth-input auth-textarea" placeholder="Ceritakan pengalaman dan keahlian lo..."><?php echo htmlspecialchars($_POST['bio'] ?? ''); ?></textarea>
+                <textarea id="bio" name="bio" class="auth-input auth-textarea" placeholder="Ceritakan pengalaman dan keahlian lo sebagai mentor..."><?php echo htmlspecialchars($_POST['bio'] ?? ''); ?></textarea>
             </div>
 
-            <?php if (!$isGoogleRegister): ?>
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="auth-input" placeholder="Minimal 6 karakter" required>
-                </div>
-                <div class="form-group">
-                    <label for="confirm_password">Konfirmasi Password</label>
-                    <input type="password" id="confirm_password" name="confirm_password" class="auth-input" placeholder="Ulangi password" required>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <button type="submit" class="btn btn-mentor">Daftar sebagai Mentor</button>
+            <button type="submit" class="btn btn-mentor">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                Daftar sebagai Mentor
+            </button>
         </form>
 
         <p class="auth-footer-text">
@@ -603,7 +578,6 @@ $isGoogleRegister = !empty($prefillGoogleId);
             }
         }
         autoDismissAlert('alert-error', 5000);
-        autoDismissAlert('alert-success', 10000);
     });
     </script>
 </body>

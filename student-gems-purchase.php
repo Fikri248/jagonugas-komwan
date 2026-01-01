@@ -1,33 +1,23 @@
 <?php
-// student-gems-purchase.php
+// student-gems-purchase.php - INSTANT DIRECT UPDATE VERSION
 session_start();
 require_once 'config.php';
 require_once 'db.php';
 
-// Check if user is logged in as student
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header('Location: login.php');
     exit;
 }
 
 $user_id = $_SESSION['user_id'];
-
-// Get user info
 $stmt = $pdo->prepare("SELECT name, email, gems FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch();
 
-// Get transaction history
-$stmt = $pdo->prepare("
-    SELECT * FROM gem_transactions 
-    WHERE user_id = ? 
-    ORDER BY created_at DESC 
-    LIMIT 10
-");
+$stmt = $pdo->prepare("SELECT * FROM gem_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
 $stmt->execute([$user_id]);
 $transactions = $stmt->fetchAll();
 
-// Packages definition
 $packages = [
     'basic' => [
         'name' => 'Basic',
@@ -35,8 +25,8 @@ $packages = [
         'gems' => 4500,
         'bonus' => 0,
         'total_gems' => 4500,
-        'badge' => 'secondary',
-        'icon' => 'bi-box'
+        'badge_color' => 'secondary',
+        'button_color' => 'dark'
     ],
     'pro' => [
         'name' => 'Pro',
@@ -44,8 +34,8 @@ $packages = [
         'gems' => 12500,
         'bonus' => 500,
         'total_gems' => 13000,
-        'badge' => 'primary',
-        'icon' => 'bi-box-seam',
+        'badge_color' => 'primary',
+        'button_color' => 'primary',
         'popular' => true
     ],
     'plus' => [
@@ -54,8 +44,8 @@ $packages = [
         'gems' => 27000,
         'bonus' => 2000,
         'total_gems' => 29000,
-        'badge' => 'warning',
-        'icon' => 'bi-box-seam-fill',
+        'badge_color' => 'warning',
+        'button_color' => 'warning',
         'best_value' => true
     ]
 ];
@@ -69,70 +59,279 @@ $packages = [
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="style.css">
-    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="<?= MIDTRANS_CLIENT_KEY ?>"></script>
+    <script type="text/javascript" src="<?= MIDTRANS_SNAP_URL ?>" data-client-key="<?= MIDTRANS_CLIENT_KEY ?>"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
-        .gradient-bg {
+        body {
+            background: #f8f9fa;
+        }
+
+        .balance-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
         }
-        .gradient-bg-success {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+
+        .promo-badge {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-weight: 800;
+            font-size: 0.7rem;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            animation: badge-float 3s ease-in-out infinite;
+            border: 3px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            white-space: nowrap;
         }
-        .gradient-bg-warning {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+
+        .promo-badge i {
+            font-size: 0.9rem;
+            line-height: 1;
+            flex-shrink: 0;
         }
-        .hover-lift {
-            transition: all 0.3s ease;
+
+        .promo-badge.popular {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
         }
-        .hover-lift:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.2) !important;
+
+        .promo-badge.best-value {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
         }
+
+        @keyframes badge-float {
+            0%, 100% { 
+                transform: translateX(-50%) translateY(0); 
+            }
+            50% { 
+                transform: translateX(-50%) translateY(-5px); 
+            }
+        }
+
         .package-card {
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
+            border: 3px solid #e5e7eb;
+            border-radius: 20px;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: white;
+            height: 100%;
+            position: relative;
+            overflow: visible;
+            margin-top: 35px;
         }
+
         .package-card:hover {
-            border-color: #667eea;
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15);
         }
+
+        .package-card.popular {
+            border-color: #ef4444;
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.2);
+        }
+
+        .package-card.popular:hover {
+            box-shadow: 0 25px 60px rgba(239, 68, 68, 0.3);
+        }
+
+        .package-card.best-value {
+            border-color: #10b981;
+            box-shadow: 0 10px 40px rgba(16, 185, 129, 0.2);
+        }
+
+        .package-card.best-value:hover {
+            box-shadow: 0 25px 60px rgba(16, 185, 129, 0.3);
+        }
+
+        .package-name-badge {
+            display: inline-block;
+            padding: 8px 24px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
         .gem-icon {
-            font-size: 3rem;
+            font-size: 4.5rem;
             background: linear-gradient(135deg, #fbbf24, #f59e0b, #dc2626);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 4px 12px rgba(251, 191, 36, 0.4));
         }
-        .balance-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+        .price-tag {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+
+        .gems-display {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 2px solid #fbbf24;
+        }
+
+        .gems-number {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #92400e;
+        }
+
+        .bonus-gems {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            display: inline-block;
+            margin-top: 0.75rem;
+            border: 2px solid #10b981;
+        }
+
+        .total-gems-section {
+            background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 2px solid #667eea;
+        }
+
+        .total-gems-number {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #667eea;
+        }
+
+        .buy-button {
+            border-radius: 15px;
+            padding: 1.1rem 2rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
             border: none;
-            position: relative;
-            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
-        .balance-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+
+        .buy-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
         }
-        .badge-popular {
-            position: absolute;
-            top: -10px;
-            right: 20px;
-            transform: rotate(10deg);
-            animation: pulse 2s infinite;
+
+        .buy-button:active {
+            transform: translateY(-1px);
         }
-        @keyframes pulse {
-            0%, 100% { transform: rotate(10deg) scale(1); }
-            50% { transform: rotate(10deg) scale(1.1); }
+
+        .feature-item {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 0.85rem;
         }
-        .feature-list li {
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
-        }
-        .feature-list li:last-child {
+
+        .feature-item:last-child {
             border-bottom: none;
+        }
+
+        .why-card {
+            background: white;
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid #e5e7eb;
+            height: 100%;
+        }
+
+        .why-card:hover {
+            border-color: #667eea;
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.2);
+        }
+
+        .why-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .table tbody tr {
+            transition: all 0.2s ease;
+        }
+
+        .table tbody tr:hover {
+            background: #f8f9fa;
+            transform: scale(1.002);
+        }
+
+        .table .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .table .btn-sm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .badge {
+            transition: all 0.2s ease;
+            padding: 0.5rem 0.85rem;
+            font-weight: 600;
+        }
+
+        .modal-content {
+            border-radius: 20px;
+        }
+
+        @keyframes scale-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @media (max-width: 768px) {
+            .promo-badge {
+                font-size: 0.6rem;
+                padding: 7px 18px;
+                top: -15px;
+                gap: 4px;
+                letter-spacing: 0.5px;
+            }
+            .promo-badge i {
+                font-size: 0.75rem;
+            }
+            .package-card {
+                margin-top: 30px;
+            }
+            .price-tag {
+                font-size: 2.5rem;
+            }
+            .gem-icon {
+                font-size: 3.5rem;
+            }
+            .total-gems-number {
+                font-size: 1.8rem;
+            }
         }
     </style>
 </head>
@@ -140,34 +339,28 @@ $packages = [
     <?php include 'student-navbar.php'; ?>
 
     <div class="container py-5">
-        <!-- Header Section -->
-        <div class="text-center mb-5">
-            <h1 class="display-4 fw-bold mb-3">
-                <i class="bi bi-gem text-warning"></i> Beli Gem
-            </h1>
-            <p class="lead text-muted">Pilih paket gem yang sesuai dengan kebutuhanmu!</p>
-        </div>
-
-        <!-- Current Balance Card -->
+        <!-- Balance Card -->
         <div class="row mb-5">
             <div class="col-lg-8 mx-auto">
                 <div class="card balance-card text-white shadow-lg">
-                    <div class="card-body p-4 position-relative">
+                    <div class="card-body p-4">
                         <div class="row align-items-center">
                             <div class="col-md-8">
                                 <p class="mb-2 opacity-75">
-                                    <i class="bi bi-person-circle me-2"></i><?= htmlspecialchars($user['name']) ?>
+                                    <i class="bi bi-person-circle me-2 fs-5"></i>
+                                    <?= htmlspecialchars($user['name']) ?>
                                 </p>
-                                <h5 class="mb-1 opacity-75">Saldo Gem Saat Ini</h5>
-                                <h2 class="mb-0 fw-bold display-4">
-                                    <i class="bi bi-gem"></i> <?= number_format($user['gems']) ?>
-                                </h2>
-                                <p class="mt-2 mb-0 opacity-75">
+                                <h6 class="mb-2 opacity-75 fw-normal">Saldo Gem Saat Ini</h6>
+                                <h1 class="mb-0 fw-bold" style="font-size: 3.5rem;">
+                                    <i class="bi bi-gem me-2"></i><?= number_format($user['gems']) ?>
+                                </h1>
+                                <p class="mt-3 mb-0 opacity-75">
+                                    <i class="bi bi-info-circle me-2"></i>
                                     <small>1 gem = 1 menit sesi mentoring</small>
                                 </p>
                             </div>
-                            <div class="col-md-4 text-center">
-                                <i class="bi bi-wallet2" style="font-size: 6rem; opacity: 0.2;"></i>
+                            <div class="col-md-4 text-center d-none d-md-block">
+                                <i class="bi bi-wallet2" style="font-size: 7rem; opacity: 0.15;"></i>
                             </div>
                         </div>
                     </div>
@@ -175,81 +368,89 @@ $packages = [
             </div>
         </div>
 
-        <!-- Packages Section -->
-        <h3 class="text-center mb-4 fw-bold">Pilih Paket Membership</h3>
+        <!-- Header -->
+        <div class="text-center mb-5">
+            <h2 class="fw-bold mb-2">Pilih Paket Membership</h2>
+            <p class="text-muted">Investasi terbaik untuk masa depanmu</p>
+        </div>
+
+        <!-- Packages -->
         <div class="row g-4 mb-5">
             <?php foreach ($packages as $key => $package): ?>
             <div class="col-lg-4 col-md-6">
-                <div class="card package-card h-100 shadow-sm hover-lift position-relative">
+                <div class="package-card <?= !empty($package['popular']) ? 'popular' : '' ?> <?= !empty($package['best_value']) ? 'best-value' : '' ?>">
+                    
                     <?php if (!empty($package['popular'])): ?>
-                        <div class="badge-popular">
-                            <span class="badge bg-danger px-3 py-2 fs-6">
-                                <i class="bi bi-fire"></i> Terpopuler
-                            </span>
+                        <div class="promo-badge popular">
+                            <i class="bi bi-fire"></i>
+                            <span>Terpopuler</span>
                         </div>
                     <?php endif; ?>
                     
                     <?php if (!empty($package['best_value'])): ?>
-                        <div class="badge-popular">
-                            <span class="badge bg-success px-3 py-2 fs-6">
-                                <i class="bi bi-star-fill"></i> Best Value
-                            </span>
+                        <div class="promo-badge best-value">
+                            <i class="bi bi-star-fill"></i>
+                            <span>Best Value</span>
                         </div>
                     <?php endif; ?>
 
-                    <div class="card-body text-center p-4">
-                        <!-- Package Icon -->
-                        <div class="mb-3">
-                            <i class="<?= $package['icon'] ?> gem-icon"></i>
+                    <div class="card-body p-4 text-center">
+                        <div class="mt-3 mb-2">
+                            <h2 class="price-tag mb-0">
+                                Rp <?= number_format($package['price'], 0, ',', '.') ?>
+                            </h2>
                         </div>
 
-                        <!-- Package Name -->
-                        <h3 class="mb-3">
-                            <span class="badge bg-<?= $package['badge'] ?> px-4 py-2 fs-5">
+                        <div class="mb-3">
+                            <span class="package-name-badge bg-<?= $package['badge_color'] ?> text-white">
                                 <?= $package['name'] ?>
                             </span>
-                        </h3>
-                        
-                        <!-- Price -->
-                        <div class="mb-4">
-                            <div class="display-5 fw-bold text-dark">
-                                Rp <?= number_format($package['price'], 0, ',', '.') ?>
+                        </div>
+
+                        <p class="text-muted small mb-4">Pembayaran sekali</p>
+
+                        <div class="my-4">
+                            <i class="bi bi-gem gem-icon"></i>
+                        </div>
+
+                        <div class="gems-display">
+                            <h3 class="gems-number mb-0">
+                                <?= number_format($package['gems']) ?> Gems
+                            </h3>
+                            <?php if ($package['bonus'] > 0): ?>
+                                <div class="bonus-gems">
+                                    <i class="bi bi-gift-fill text-success me-1"></i>
+                                    <strong class="text-success" style="font-size: 0.9rem;">
+                                        Bonus +<?= number_format($package['bonus']) ?>
+                                    </strong>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="total-gems-section">
+                            <p class="mb-1 text-muted fw-semibold" style="font-size: 0.75rem; letter-spacing: 1px;">TOTAL GEMS</p>
+                            <h2 class="total-gems-number mb-0">
+                                <?= number_format($package['total_gems']) ?>
+                            </h2>
+                        </div>
+
+                        <div class="text-start mb-4">
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                <span class="text-muted">Pembayaran aman via Midtrans</span>
                             </div>
-                            <small class="text-muted">Pembayaran sekali</small>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                <span class="text-muted">Gems masuk otomatis instant</span>
+                            </div>
+                            <div class="feature-item">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                <span class="text-muted">Berlaku selamanya tanpa expired</span>
+                            </div>
                         </div>
 
-                        <hr class="my-4">
-
-                        <!-- Gem Details -->
-                        <div class="mb-4">
-                            <ul class="list-unstyled feature-list text-start">
-                                <li class="d-flex align-items-center justify-content-between">
-                                    <span><i class="bi bi-gem text-warning me-2"></i>Gem Dasar</span>
-                                    <strong><?= number_format($package['gems']) ?></strong>
-                                </li>
-                                <?php if ($package['bonus'] > 0): ?>
-                                <li class="d-flex align-items-center justify-content-between text-success">
-                                    <span><i class="bi bi-gift-fill me-2"></i>Bonus Gem</span>
-                                    <strong>+<?= number_format($package['bonus']) ?></strong>
-                                </li>
-                                <?php endif; ?>
-                                <li class="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                                    <span class="fw-bold"><i class="bi bi-star-fill text-warning me-2"></i>Total Gem</span>
-                                    <h4 class="mb-0 text-primary"><?= number_format($package['total_gems']) ?></h4>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <!-- Features -->
-                        <div class="mb-4 text-start">
-                            <p class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Pembayaran aman via Midtrans</p>
-                            <p class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Gem langsung masuk otomatis</p>
-                            <p class="small text-muted mb-0"><i class="bi bi-check-circle-fill text-success me-2"></i>Berlaku selamanya</p>
-                        </div>
-
-                        <!-- Buy Button -->
                         <button type="button" 
-                                class="btn btn-<?= $package['badge'] ?> w-100 btn-lg fw-bold"
+                                class="btn btn-<?= $package['button_color'] ?> w-100 buy-button"
                                 onclick="buyPackage('<?= $key ?>', <?= $package['price'] ?>, <?= $package['total_gems'] ?>)">
                             <i class="bi bi-credit-card me-2"></i>Beli Sekarang
                         </button>
@@ -259,34 +460,36 @@ $packages = [
             <?php endforeach; ?>
         </div>
 
-        <!-- Why Choose Us Section -->
+        <!-- Why Section -->
         <div class="row mb-5">
-            <div class="col-lg-10 mx-auto">
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <h4 class="mb-4 text-center"><i class="bi bi-shield-check text-success me-2"></i>Kenapa Beli Gem?</h4>
-                        <div class="row g-4">
-                            <div class="col-md-4 text-center">
-                                <div class="mb-3">
-                                    <i class="bi bi-lightning-charge-fill text-warning" style="font-size: 3rem;"></i>
-                                </div>
-                                <h5>Akses Instant</h5>
-                                <p class="text-muted">Gem langsung masuk ke akunmu setelah pembayaran berhasil</p>
+            <div class="col-12">
+                <h3 class="text-center mb-4 fw-bold">Kenapa Beli Gem di JagoNugas?</h3>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="why-card">
+                            <div class="why-icon">
+                                <i class="bi bi-lightning-charge-fill text-warning"></i>
                             </div>
-                            <div class="col-md-4 text-center">
-                                <div class="mb-3">
-                                    <i class="bi bi-shield-fill-check text-success" style="font-size: 3rem;"></i>
-                                </div>
-                                <h5>Aman & Terpercaya</h5>
-                                <p class="text-muted">Pembayaran diproses oleh Midtrans, payment gateway terpercaya</p>
+                            <h5 class="fw-bold mb-3">Akses Instant</h5>
+                            <p class="text-muted mb-0">Gems langsung masuk setelah pembayaran berhasil</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="why-card">
+                            <div class="why-icon">
+                                <i class="bi bi-shield-fill-check text-success"></i>
                             </div>
-                            <div class="col-md-4 text-center">
-                                <div class="mb-3">
-                                    <i class="bi bi-infinity text-primary" style="font-size: 3rem;"></i>
-                                </div>
-                                <h5>Tidak Ada Expired</h5>
-                                <p class="text-muted">Gem yang kamu beli berlaku selamanya, tanpa batas waktu</p>
+                            <h5 class="fw-bold mb-3">Aman & Terpercaya</h5>
+                            <p class="text-muted mb-0">Diproses oleh Midtrans payment gateway #1</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="why-card">
+                            <div class="why-icon">
+                                <i class="bi bi-infinity text-primary"></i>
                             </div>
+                            <h5 class="fw-bold mb-3">Tidak Ada Expired</h5>
+                            <p class="text-muted mb-0">Gems berlaku selamanya tanpa batas waktu</p>
                         </div>
                     </div>
                 </div>
@@ -296,16 +499,16 @@ $packages = [
         <!-- Transaction History -->
         <?php if (!empty($transactions)): ?>
         <div class="row">
-            <div class="col-lg-10 mx-auto">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0">
+            <div class="col-12">
+                <div class="card shadow-sm" style="border-radius: 20px; overflow: hidden;">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h5 class="mb-0 fw-bold">
                             <i class="bi bi-clock-history me-2"></i>Riwayat Transaksi
                         </h5>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0">
+                            <table class="table table-hover mb-0 align-middle">
                                 <thead class="table-light">
                                     <tr>
                                         <th>Order ID</th>
@@ -314,43 +517,31 @@ $packages = [
                                         <th>Harga</th>
                                         <th>Status</th>
                                         <th>Tanggal</th>
+                                        <th class="text-center">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php foreach ($transactions as $trx): ?>
-                                    <tr>
+                                    <tr data-order-id="<?= htmlspecialchars($trx['order_id']) ?>">
+                                        <td><code class="small"><?= substr($trx['order_id'], 0, 20) ?>...</code></td>
                                         <td>
-                                            <code class="small"><?= htmlspecialchars($trx['order_id']) ?></code>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-<?= $packages[$trx['package']]['badge'] ?>">
+                                            <span class="badge bg-<?= $packages[$trx['package']]['badge_color'] ?>">
                                                 <?= $packages[$trx['package']]['name'] ?>
                                             </span>
                                         </td>
-                                        <td>
-                                            <i class="bi bi-gem text-warning"></i> 
-                                            <strong><?= number_format($trx['gems']) ?></strong>
-                                        </td>
-                                        <td>Rp <?= number_format($trx['amount'], 0, ',', '.') ?></td>
+                                        <td><i class="bi bi-gem text-warning"></i> <strong><?= number_format($trx['gems']) ?></strong></td>
+                                        <td><strong>Rp <?= number_format($trx['amount'], 0, ',', '.') ?></strong></td>
                                         <td>
                                             <?php
                                             $statusClass = [
-                                                'pending' => 'warning',
-                                                'settlement' => 'success',
-                                                'capture' => 'success',
-                                                'deny' => 'danger',
-                                                'cancel' => 'danger',
-                                                'expire' => 'secondary',
-                                                'failure' => 'danger'
+                                                'pending' => 'warning', 'settlement' => 'success',
+                                                'capture' => 'success', 'deny' => 'danger',
+                                                'cancel' => 'danger', 'expire' => 'secondary', 'failure' => 'danger'
                                             ];
                                             $statusText = [
-                                                'pending' => 'Menunggu',
-                                                'settlement' => 'Berhasil',
-                                                'capture' => 'Berhasil',
-                                                'deny' => 'Ditolak',
-                                                'cancel' => 'Dibatalkan',
-                                                'expire' => 'Kadaluarsa',
-                                                'failure' => 'Gagal'
+                                                'pending' => 'Menunggu', 'settlement' => 'Berhasil',
+                                                'capture' => 'Berhasil', 'deny' => 'Ditolak',
+                                                'cancel' => 'Dibatalkan', 'expire' => 'Kadaluarsa', 'failure' => 'Gagal'
                                             ];
                                             $status = $trx['transaction_status'];
                                             ?>
@@ -360,8 +551,20 @@ $packages = [
                                         </td>
                                         <td>
                                             <small class="text-muted">
+                                                <i class="bi bi-calendar me-1"></i>
                                                 <?= date('d M Y, H:i', strtotime($trx['created_at'])) ?>
                                             </small>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if ($status === 'pending' && !empty($trx['snap_token'])): ?>
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-primary"
+                                                        onclick="continuePaymentFromHistory('<?= htmlspecialchars($trx['snap_token']) ?>', '<?= htmlspecialchars($trx['order_id']) ?>', <?= $trx['gems'] ?>)">
+                                                    <i class="bi bi-credit-card me-1"></i>Bayar
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted small">-</span>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -378,13 +581,51 @@ $packages = [
     <!-- Loading Modal -->
     <div class="modal fade" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
+            <div class="modal-content border-0 shadow-lg">
                 <div class="modal-body text-center p-5">
-                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                    <div class="spinner-border text-primary mb-3" style="width: 4rem; height: 4rem;" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <h5>Memproses pembayaran...</h5>
-                    <p class="text-muted mb-0">Mohon tunggu sebentar</p>
+                    <h5 class="fw-bold mb-2">Memproses Pembayaran</h5>
+                    <p class="text-muted mb-0">Mohon tunggu sebentar...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Cancel Modal -->
+    <div class="modal fade" id="confirmCancelModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-body text-center p-5">
+                    <div class="mb-4">
+                        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+                            <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 2.5rem;"></i>
+                        </div>
+                    </div>
+                    <h4 class="fw-bold mb-3">Batalkan Pembayaran?</h4>
+                    <p class="text-muted mb-4">
+                        Apakah Anda yakin ingin membatalkan pembayaran ini? 
+                        <br>Transaksi akan dihapus dari riwayat.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <button type="button" 
+                                class="btn btn-danger btn-lg fw-bold" 
+                                style="border-radius: 12px; padding: 0.9rem;"
+                                onclick="confirmCancelPayment()">
+                            <i class="bi bi-x-circle me-2"></i>Ya, Batalkan
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-secondary btn-lg" 
+                                style="border-radius: 12px; padding: 0.9rem;"
+                                onclick="dismissCancelModal()">
+                            <i class="bi bi-arrow-left me-2"></i>Kembali ke Pembayaran
+                        </button>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Anda bisa melanjutkan pembayaran kapan saja dari riwayat transaksi
+                    </p>
                 </div>
             </div>
         </div>
@@ -393,102 +634,273 @@ $packages = [
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let loadingModal = null;
+        let confirmCancelModal = null;
+        let currentOrderId = null;
+        let currentSnapToken = null;
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+            confirmCancelModal = new bootstrap.Modal(document.getElementById('confirmCancelModal'));
         });
 
-        function buyPackage(packageType, price, gems) {
-            // Show loading modal
+        // Buy Package Function
+        function buyPackage(packageKey, price, gems) {
+            console.log('Creating transaction...', {packageKey, price, gems});
+            
             loadingModal.show();
-
-            // Create transaction
+            
             fetch('payment-process.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    package: packageType,
+                    package: packageKey,
                     price: price,
                     gems: gems
                 })
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Transaction created:', data);
+                loadingModal.hide();
+                
+                if (!data.success) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Oops...',
+                        text: data.message || 'Gagal membuat transaksi'
+                    });
+                    return;
+                }
+                
+                currentOrderId = data.order_id;
+                currentSnapToken = data.snap_token;
+                
+                // Open Midtrans Snap payment popup
+                console.log('Opening payment popup...');
+                snap.pay(currentSnapToken, {
+                    onSuccess: function(result) {
+                        console.log('✅ Payment Success!', result);
+                        instantDirectUpdate(currentOrderId, gems);
+                    },
+                    onPending: function(result) {
+                        console.log('⏳ Payment Pending', result);
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Pembayaran Tertunda',
+                            text: 'Silakan selesaikan pembayaran Anda. Cek riwayat transaksi untuk melanjutkan.',
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            location.reload();
+                        });
+                    },
+                    onError: function(result) {
+                        console.error('❌ Payment Error', result);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Pembayaran Gagal',
+                            text: 'Terjadi kesalahan saat memproses pembayaran. Silakan coba lagi.',
+                            confirmButtonText: 'OK'
+                        });
+                    },
+                    onClose: function() {
+                        console.log('🔒 Payment popup closed');
+                        confirmCancelModal.show();
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error creating transaction:', error);
+                loadingModal.hide();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Terjadi kesalahan: ' + error.message
+                });
+            });
+        }
+
+        // INSTANT DIRECT UPDATE - Tanpa cek Midtrans API
+        function instantDirectUpdate(orderId, gemsAmount) {
+            console.log('🚀 Instant Direct Update:', orderId);
+            
+            // Show loading with success message
+            const loadingContent = `
+                <div class="modal-body text-center p-5">
+                    <div class="mb-4">
+                        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; animation: scale-pulse 1s ease-in-out infinite;">
+                            <i class="bi bi-gem text-white" style="font-size: 3rem;"></i>
+                        </div>
+                    </div>
+                    <h4 class="fw-bold mb-3">💎 Pembayaran Berhasil!</h4>
+                    <p class="text-muted mb-0">Gems sedang ditambahkan ke akun Anda...</p>
+                </div>
+            `;
+            
+            document.querySelector('#loadingModal .modal-content').innerHTML = loadingContent;
+            loadingModal.show();
+            
+            // Call direct update API
+            fetch('payment-direct-update.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({order_id: orderId})
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Direct update response:', data);
+                
                 loadingModal.hide();
                 
                 if (data.success) {
-                    // Open Midtrans Snap
-                    snap.pay(data.snap_token, {
-                        onSuccess: function(result) {
-                            console.log('Payment success:', result);
-                            checkPaymentStatus(data.order_id);
-                        },
-                        onPending: function(result) {
-                            console.log('Payment pending:', result);
-                            showAlert('warning', 'Pembayaran Tertunda', 'Silakan selesaikan pembayaran Anda.');
-                            setTimeout(() => location.reload(), 2000);
-                        },
-                        onError: function(result) {
-                            console.log('Payment error:', result);
-                            showAlert('danger', 'Pembayaran Gagal', 'Terjadi kesalahan. Silakan coba lagi.');
-                        },
-                        onClose: function() {
-                            console.log('Payment popup closed');
-                        }
+                    // Show success alert
+                    Swal.fire({
+                        icon: 'success',
+                        title: '🎉 Yeay! Pembayaran Berhasil!',
+                        html: `
+                            <div class="text-center">
+                                <div class="mb-3">
+                                    <i class="bi bi-gem text-warning" style="font-size: 4rem;"></i>
+                                </div>
+                                <h4 class="fw-bold mb-3">+${Number(gemsAmount).toLocaleString('id-ID')} Gems</h4>
+                                <p class="text-muted mb-2">Gems telah ditambahkan ke akun Anda!</p>
+                                <p class="text-success fw-bold">Total Gems: ${Number(data.total_gems).toLocaleString('id-ID')}</p>
+                            </div>
+                        `,
+                        confirmButtonText: 'Lihat Saldo Baru',
+                        confirmButtonColor: '#10b981',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false
+                    }).then(() => {
+                        window.location.reload();
                     });
                 } else {
-                    showAlert('danger', 'Error', data.message || 'Terjadi kesalahan. Silakan coba lagi.');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Perhatian',
+                        text: 'Pembayaran berhasil, tapi gagal update gems. Silakan hubungi admin.',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        window.location.reload();
+                    });
                 }
             })
             .catch(error => {
+                console.error('Direct update error:', error);
                 loadingModal.hide();
-                console.error('Error:', error);
-                showAlert('danger', 'Error', 'Terjadi kesalahan sistem. Silakan coba lagi.');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Pembayaran berhasil, tapi terjadi error saat update. Halaman akan di-refresh.',
+                    confirmButtonText: 'OK'
+                }).then(() => {
+                    window.location.reload();
+                });
             });
         }
 
-        function checkPaymentStatus(orderId) {
-            fetch('payment-check.php?order_id=' + orderId)
+        // Continue Payment from History
+        function continuePaymentFromHistory(snapToken, orderId, gems) {
+            console.log('Continuing payment:', orderId);
+            currentOrderId = orderId;
+            currentSnapToken = snapToken;
+            
+            snap.pay(snapToken, {
+                onSuccess: function(result) {
+                    console.log('✅ Payment Success!', result);
+                    instantDirectUpdate(orderId, gems);
+                },
+                onPending: function(result) {
+                    console.log('⏳ Payment Pending', result);
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Pembayaran Tertunda',
+                        text: 'Silakan selesaikan pembayaran Anda.',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        location.reload();
+                    });
+                },
+                onError: function(result) {
+                    console.error('❌ Payment Error', result);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Pembayaran Gagal',
+                        text: 'Terjadi kesalahan. Silakan coba lagi.',
+                        confirmButtonText: 'OK'
+                    });
+                },
+                onClose: function() {
+                    console.log('🔒 Payment popup closed');
+                    confirmCancelModal.show();
+                }
+            });
+        }
+
+        // Cancel Payment
+        function confirmCancelPayment() {
+            if (!currentOrderId) {
+                confirmCancelModal.hide();
+                return;
+            }
+            
+            fetch('payment-cancel.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({order_id: currentOrderId})
+            })
             .then(response => response.json())
             .then(data => {
+                confirmCancelModal.hide();
                 if (data.success) {
-                    if (data.status === 'settlement' || data.status === 'capture') {
-                        showAlert('success', 'Pembayaran Berhasil! 🎉', 
-                            `Gems sebanyak ${data.gems.toLocaleString()} telah ditambahkan ke akun Anda.`);
-                        setTimeout(() => location.reload(), 2000);
-                    } else {
-                        showAlert('warning', 'Status Pembayaran', 'Status: ' + data.status);
-                        setTimeout(() => location.reload(), 2000);
-                    }
-                } else {
-                    showAlert('danger', 'Error', 'Gagal memeriksa status pembayaran.');
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Transaksi Dibatalkan',
+                        text: 'Transaksi telah dibatalkan dan dihapus dari riwayat.',
+                        confirmButtonText: 'OK',
+                        timer: 3000
+                    }).then(() => {
+                        location.reload();
+                    });
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                showAlert('danger', 'Error', 'Gagal memeriksa status pembayaran.');
+                console.error('Cancel error:', error);
+                confirmCancelModal.hide();
             });
         }
 
-        function showAlert(type, title, message) {
-            const alertHtml = `
-                <div class="alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" 
-                     role="alert" style="z-index: 9999; min-width: 300px; max-width: 500px;">
-                    <strong>${title}</strong><br>${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-            document.body.insertAdjacentHTML('beforeend', alertHtml);
-            
-            setTimeout(() => {
-                const alerts = document.querySelectorAll('.alert');
-                alerts.forEach(alert => {
-                    alert.classList.remove('show');
-                    setTimeout(() => alert.remove(), 150);
+        function dismissCancelModal() {
+            confirmCancelModal.hide();
+            if (currentSnapToken) {
+                const row = document.querySelector(`tr[data-order-id="${currentOrderId}"]`);
+                const gemsText = row.querySelector('td:nth-child(3) strong').textContent;
+                const gems = parseInt(gemsText.replace(/[^0-9]/g, ''));
+                
+                snap.pay(currentSnapToken, {
+                    onSuccess: function(result) {
+                        instantDirectUpdate(currentOrderId, gems);
+                    },
+                    onPending: function(result) {
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Pembayaran Tertunda',
+                            text: 'Silakan selesaikan pembayaran Anda.',
+                            confirmButtonText: 'OK'
+                        }).then(() => location.reload());
+                    },
+                    onError: function(result) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Pembayaran Gagal',
+                            text: 'Terjadi kesalahan. Silakan coba lagi.',
+                            confirmButtonText: 'OK'
+                        });
+                    },
+                    onClose: function() {
+                        confirmCancelModal.show();
+                    }
                 });
-            }, 5000);
+            }
         }
     </script>
 </body>

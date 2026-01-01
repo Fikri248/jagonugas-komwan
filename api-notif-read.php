@@ -10,7 +10,8 @@ if (!isset($_SESSION['user_id'])) {
 $data = json_decode(file_get_contents('php://input'), true);
 $notifId = (int)($data['id'] ?? 0);
 
+/** @var PDOStatement|false $stmt */
 $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?");
-$success = $stmt->execute([$notifId, $_SESSION['user_id']]);
+$success = $stmt ? $stmt->execute([$notifId, $_SESSION['user_id']]) : false;
 
 echo json_encode(['success' => $success]);

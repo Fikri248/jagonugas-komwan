@@ -43,7 +43,7 @@ class Database {
             $this->host     = 'localhost';
             $this->db_name  = 'jagonugas_db';
             $this->username = 'root';
-            $this->password = '';
+            $this->password = 'root';
             $this->port     = 3306;
         }
     }

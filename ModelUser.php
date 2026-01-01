@@ -20,9 +20,11 @@ class User
     public $bio;
     public $expertise;
     public $transkrip_path;
+    public $google_id;       // <-- TAMBAH: untuk Google OAuth
+    public $created_at;
 
     // Properties (alias untuk kompatibilitas kode lama)
-    public $programstudi;    // versi lama (tanpa underscore) [file:9]
+    public $programstudi;    // versi lama (tanpa underscore)
 
     // Constants
     const SIGNUP_BONUS_GEMS = 75;
@@ -73,7 +75,6 @@ class User
 
     private function normalizeExpertise($expertise): string
     {
-        // Boleh array atau string JSON atau string biasa
         if (is_array($expertise)) {
             return json_encode(array_values($expertise));
         }
@@ -83,13 +84,11 @@ class User
             return json_encode([]);
         }
 
-        // Kalau sudah JSON valid, simpan apa adanya
         $decoded = json_decode($expertise, true);
         if (json_last_error() === JSON_ERROR_NONE) {
             return json_encode($decoded);
         }
 
-        // Kalau string biasa, bungkus jadi array
         return json_encode([$expertise]);
     }
 
@@ -103,8 +102,8 @@ class User
         }
 
         $query = "INSERT INTO {$this->table}
-                  (name, email, password, program_studi, semester, role, gems)
-                  VALUES (:name, :email, :password, :program_studi, :semester, :role, :gems)";
+                  (name, email, password, program_studi, semester, role, gems, google_id, avatar)
+                  VALUES (:name, :email, :password, :program_studi, :semester, :role, :gems, :google_id, :avatar)";
 
         $stmt = $this->conn->prepare($query);
 
@@ -112,6 +111,8 @@ class User
         $email        = $this->sanitizeEmail($this->email);
         $programStudi = $this->sanitizeText($this->getProgramStudiValue());
         $semester     = (int) $this->semester;
+        $googleId     = $this->google_id ? $this->sanitizeText($this->google_id) : null;
+        $avatar       = $this->avatar ? $this->sanitizeText($this->avatar) : null;
 
         $hashedPassword = password_hash((string)$this->password, PASSWORD_DEFAULT);
         $role = self::ROLE_STUDENT;
@@ -124,6 +125,8 @@ class User
         $stmt->bindParam(':semester', $semester, PDO::PARAM_INT);
         $stmt->bindParam(':role', $role);
         $stmt->bindParam(':gems', $bonusGems, PDO::PARAM_INT);
+        $stmt->bindParam(':google_id', $googleId);
+        $stmt->bindParam(':avatar', $avatar);
 
         if ($stmt->execute()) {
             return [
@@ -138,7 +141,7 @@ class User
     }
 
     /**
-     * REGISTER MENTOR
+     * REGISTER MENTOR - Support Google OAuth
      */
     public function registerMentor($expertise = [], $bio = '', $transkripPath = ''): array
     {
@@ -147,8 +150,8 @@ class User
         }
 
         $query = "INSERT INTO {$this->table}
-                  (name, email, password, program_studi, semester, role, expertise, bio, transkrip_path, is_verified, gems)
-                  VALUES (:name, :email, :password, :program_studi, :semester, :role, :expertise, :bio, :transkrip_path, 0, :gems)";
+                  (name, email, password, program_studi, semester, role, expertise, bio, transkrip_path, is_verified, gems, google_id, avatar)
+                  VALUES (:name, :email, :password, :program_studi, :semester, :role, :expertise, :bio, :transkrip_path, 0, :gems, :google_id, :avatar)";
 
         $stmt = $this->conn->prepare($query);
 
@@ -156,6 +159,8 @@ class User
         $email        = $this->sanitizeEmail($this->email);
         $programStudi = $this->sanitizeText($this->getProgramStudiValue());
         $semester     = (int) $this->semester;
+        $googleId     = $this->google_id ? $this->sanitizeText($this->google_id) : null;
+        $avatar       = $this->avatar ? $this->sanitizeText($this->avatar) : null;
 
         $hashedPassword = password_hash((string)$this->password, PASSWORD_DEFAULT);
         $role = self::ROLE_MENTOR;
@@ -176,6 +181,8 @@ class User
         $stmt->bindParam(':bio', $bioClean);
         $stmt->bindParam(':transkrip_path', $transkripPathClean);
         $stmt->bindParam(':gems', $bonusGems, PDO::PARAM_INT);
+        $stmt->bindParam(':google_id', $googleId);
+        $stmt->bindParam(':avatar', $avatar);
 
         if ($stmt->execute()) {
             return [
@@ -190,11 +197,11 @@ class User
     }
 
     /**
-     * LOGIN - Verify credentials
+     * LOGIN - Verify credentials (support Google OAuth)
      */
     public function login(): array
     {
-        $query = "SELECT id, name, email, password, role, program_studi, semester, is_verified, gems, avatar
+        $query = "SELECT id, name, email, password, role, program_studi, semester, is_verified, gems, avatar, google_id
                   FROM {$this->table}
                   WHERE email = :email
                   LIMIT 1";
@@ -214,7 +221,6 @@ class User
             return ['success' => false, 'message' => 'Email atau password salah'];
         }
 
-        // Cek verifikasi untuk mentor
         if ($row['role'] === self::ROLE_MENTOR && !(int)$row['is_verified']) {
             return ['success' => false, 'message' => 'Akun mentor belum diverifikasi'];
         }
@@ -230,9 +236,70 @@ class User
                 'semester'    => $row['semester'],
                 'is_verified' => $row['is_verified'],
                 'gems'        => $row['gems'],
-                'avatar'      => $row['avatar']
+                'avatar'      => $row['avatar'],
+                'google_id'   => $row['google_id']
             ]
         ];
+    }
+
+    /**
+     * LOGIN BY GOOGLE ID
+     */
+    public function loginByGoogleId(string $googleId): array
+    {
+        $query = "SELECT id, name, email, password, role, program_studi, semester, is_verified, gems, avatar, google_id
+                  FROM {$this->table}
+                  WHERE google_id = :google_id
+                  LIMIT 1";
+
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':google_id', $googleId);
+        $stmt->execute();
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Akun Google tidak ditemukan'];
+        }
+
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row['role'] === self::ROLE_MENTOR && !(int)$row['is_verified']) {
+            return ['success' => false, 'message' => 'Akun mentor belum diverifikasi'];
+        }
+
+        return [
+            'success' => true,
+            'user' => [
+                'id'          => $row['id'],
+                'name'        => $row['name'],
+                'email'       => $row['email'],
+                'role'        => $row['role'],
+                'program_studi' => $row['program_studi'],
+                'semester'    => $row['semester'],
+                'is_verified' => $row['is_verified'],
+                'gems'        => $row['gems'],
+                'avatar'      => $row['avatar'],
+                'google_id'   => $row['google_id']
+            ]
+        ];
+    }
+
+    /**
+     * Link Google account to existing user
+     */
+    public function linkGoogleAccount(int $userId, string $googleId, ?string $avatar = null): bool
+    {
+        $updates = ['google_id = :google_id'];
+        $params = [':google_id' => $googleId, ':id' => $userId];
+
+        if ($avatar) {
+            $updates[] = 'avatar = :avatar';
+            $params[':avatar'] = $this->sanitizeText($avatar);
+        }
+
+        $query = "UPDATE {$this->table} SET " . implode(', ', $updates) . " WHERE id = :id";
+        $stmt = $this->conn->prepare($query);
+
+        return (bool)$stmt->execute($params);
     }
 
     /**
@@ -251,11 +318,42 @@ class User
     }
 
     /**
+     * Check if Google ID exists
+     */
+    public function googleIdExists(string $googleId): bool
+    {
+        $query = "SELECT id FROM {$this->table} WHERE google_id = :google_id LIMIT 1";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':google_id', $googleId);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Get user by email
+     */
+    public function getByEmail(string $email)
+    {
+        $query = "SELECT id, name, email, role, program_studi, semester, is_verified, gems, avatar, google_id, bio, expertise, created_at
+                  FROM {$this->table}
+                  WHERE email = :email
+                  LIMIT 1";
+
+        $stmt = $this->conn->prepare($query);
+        $email = $this->sanitizeEmail($email);
+        $stmt->bindParam(':email', $email);
+        $stmt->execute();
+
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Get user by ID
      */
     public function getById($id)
     {
-        $query = "SELECT id, name, email, role, program_studi, semester, is_verified, gems, avatar, bio, expertise, created_at
+        $query = "SELECT id, name, email, role, program_studi, semester, is_verified, gems, avatar, google_id, bio, expertise, created_at
                   FROM {$this->table}
                   WHERE id = :id
                   LIMIT 1";
@@ -273,8 +371,7 @@ class User
      */
     public function updateProfile($userId, $data): array
     {
-        // Ditambah expertise & bio biar mentor juga bisa update
-        $allowedFields = ['name', 'program_studi', 'semester', 'bio', 'avatar', 'expertise'];
+        $allowedFields = ['name', 'program_studi', 'semester', 'bio', 'avatar', 'expertise', 'google_id'];
 
         $updates = [];
         $params = [':id' => (int)$userId];
@@ -282,7 +379,6 @@ class User
         foreach ((array)$data as $key => $value) {
             if (!in_array($key, $allowedFields, true)) continue;
 
-            // expertise bisa array/string
             if ($key === 'expertise') {
                 $updates[] = "expertise = :expertise";
                 $params[':expertise'] = $this->normalizeExpertise($value);

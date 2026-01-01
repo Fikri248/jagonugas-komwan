@@ -4,15 +4,12 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
 
-// Defensive: fallback kalau BASE_PATH ga ke-define
 $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
 
-// Session check
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Harus login
 if (!isset($_SESSION['user_id'])) {
     header("Location: " . $BASE . "/login.php?redirect=student-forum-create.php");
     exit;
@@ -23,7 +20,6 @@ $name = $_SESSION['name'] ?? 'User';
 $errors = [];
 $success = false;
 
-// Database connection
 $pdo = null;
 try {
     $pdo = (new Database())->getConnection();
@@ -31,22 +27,18 @@ try {
     die("Database connection failed: " . $e->getMessage());
 }
 
-// Get categories
 $categories = $pdo->query("SELECT * FROM forum_categories ORDER BY name")->fetchAll();
 
-// Get user gems
 $stmt = $pdo->prepare("SELECT gems FROM users WHERE id = ?");
 $stmt->execute([$userId]);
 $userGems = $stmt->fetchColumn();
 
-// Handle form submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
     $content = trim($_POST['content'] ?? '');
     $categoryId = (int)($_POST['category_id'] ?? 0);
     $gemReward = min(50, max(5, (int)($_POST['gem_reward'] ?? 5)));
     
-    // Validation
     if (empty($title)) {
         $errors[] = "Judul pertanyaan wajib diisi";
     } elseif (strlen($title) < 10) {
@@ -71,16 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             
-            // Insert thread
             $stmt = $pdo->prepare("INSERT INTO forum_threads (user_id, category_id, title, content, gem_reward) VALUES (?, ?, ?, ?, ?)");
             $stmt->execute([$userId, $categoryId, $title, $content, $gemReward]);
             $threadId = $pdo->lastInsertId();
             
-            // Deduct gems from user
             $stmt = $pdo->prepare("UPDATE users SET gems = gems - ? WHERE id = ?");
             $stmt->execute([$gemReward, $userId]);
             
-            // Handle file uploads
             if (!empty($_FILES['attachments']['name'][0])) {
                 $uploadDir = __DIR__ . '/uploads/forum/';
                 if (!is_dir($uploadDir)) {
@@ -93,7 +82,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $fileSize = $_FILES['attachments']['size'][$key];
                         $fileType = $_FILES['attachments']['type'][$key];
                         
-                        // Max 5MB
                         if ($fileSize > 5 * 1024 * 1024) continue;
                         
                         $ext = pathinfo($fileName, PATHINFO_EXTENSION);
@@ -108,7 +96,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             
-            // Kirim notifikasi thread dibuat
             $notif = new NotificationHelper($pdo);
             $notif->threadCreated($userId, $threadId, $title);
             
@@ -129,8 +116,138 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buat Pertanyaan - JagoNugas</title>
-    <link rel="stylesheet" href="<?php echo $BASE; ?>/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        /* ===== RESET & BASE ===== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background: #f8fafc; min-height: 100vh; }
+        
+        /* ===== FORUM PAGE ===== */
+        .forum-page { background: #f8fafc; min-height: 100vh; }
+        
+        /* ===== BUTTONS ===== */
+        .btn { padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
+        .btn-outline { border: 2px solid #e2e8f0; color: #475569; background: white; }
+        .btn-outline:hover { border-color: #667eea; color: #667eea; }
+        
+        /* ===== ALERTS ===== */
+        .alert { padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 0.9rem; }
+        .alert-error { background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #dc2626; border: 1px solid #fecaca; }
+        .alert-error ul { margin: 8px 0 0 20px; }
+        .alert-error li { margin: 4px 0; }
+        
+        /* ===== FORUM CREATE CONTAINER ===== */
+        .forum-create-container { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+        
+        /* ===== FORUM CREATE CARD ===== */
+        .forum-create-card { background: white; border-radius: 20px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden; }
+        
+        .forum-create-header { padding: 32px 32px 24px; border-bottom: 1px solid #f1f5f9; }
+        .forum-create-header h1 { font-size: 1.75rem; font-weight: 700; color: #1e293b; margin: 16px 0 8px; }
+        .forum-create-header p { color: #64748b; font-size: 1rem; }
+        
+        .back-link { display: inline-flex; align-items: center; gap: 6px; color: #64748b; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: all 0.2s; }
+        .back-link:hover { color: #667eea; }
+        
+        /* ===== FORM ===== */
+        .forum-create-form { padding: 32px; }
+        
+        .form-group { margin-bottom: 24px; }
+        .form-group label { display: block; font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 0.95rem; }
+        .form-group .required { color: #ef4444; }
+        .form-group small { display: block; color: #94a3b8; margin-top: 6px; font-size: 0.85rem; }
+        
+        .form-group input[type="text"],
+        .form-group textarea { width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 0.95rem; transition: all 0.2s; outline: none; background: #f8fafc; font-family: inherit; }
+        .form-group input[type="text"]:focus,
+        .form-group textarea:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
+        .form-group textarea { resize: vertical; min-height: 160px; }
+        
+        /* ===== CUSTOM SELECT ===== */
+        .custom-select-wrapper { position: relative; }
+        .custom-select { position: relative; }
+        
+        .custom-select-trigger { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
+        .custom-select-trigger:hover { border-color: #cbd5e1; }
+        .custom-select.open .custom-select-trigger { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
+        .custom-select-trigger.has-value { background: white; }
+        .custom-select-trigger span { color: #94a3b8; }
+        .custom-select-trigger.has-value span { color: #1e293b; }
+        
+        .selected-preview { display: flex; align-items: center; gap: 12px; }
+        .selected-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .selected-name { font-weight: 600; color: #1e293b; }
+        
+        .custom-options { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: white; border: 2px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12); max-height: 300px; overflow-y: auto; opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 100; }
+        .custom-select.open .custom-options { opacity: 1; visibility: visible; transform: translateY(0); }
+        
+        .custom-option { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid #f1f5f9; }
+        .custom-option:last-child { border-bottom: none; }
+        .custom-option:hover { background: #f8fafc; }
+        .custom-option.selected { background: linear-gradient(135deg, #eef2ff, #e0e7ff); }
+        
+        .option-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+        .option-info { flex: 1; }
+        .option-name { display: block; font-weight: 600; color: #1e293b; font-size: 0.95rem; }
+        .option-desc { font-size: 0.8rem; color: #64748b; }
+        
+        /* ===== FILE UPLOAD ===== */
+        .file-upload-area { border: 2px dashed #e2e8f0; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
+        .file-upload-area:hover { border-color: #667eea; background: #f0f4ff; }
+        .file-upload-area.dragover { border-color: #667eea; background: #eef2ff; transform: scale(1.01); }
+        .file-upload-area i { font-size: 2.5rem; color: #94a3b8; margin-bottom: 12px; display: block; }
+        .file-upload-area p { color: #64748b; margin-bottom: 4px; }
+        .file-upload-area p span { color: #667eea; font-weight: 600; }
+        .file-upload-area small { color: #94a3b8; font-size: 0.8rem; }
+        .file-upload-area input[type="file"] { display: none; }
+        
+        .file-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+        .file-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .file-item i { color: #667eea; font-size: 1.2rem; }
+        .file-name { flex: 1; font-weight: 500; color: #1e293b; font-size: 0.9rem; }
+        .file-size { color: #94a3b8; font-size: 0.8rem; }
+        .file-remove { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; }
+        .file-remove:hover { background: #fee2e2; color: #ef4444; }
+        
+        /* ===== GEM REWARD SELECTOR ===== */
+        .gem-reward-selector { background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; }
+        .gem-reward-header { margin-bottom: 16px; }
+        .gem-balance { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; color: #475569; }
+        .gem-balance i { color: #667eea; }
+        .gem-balance strong { color: #1e293b; }
+        
+        .gem-reward-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .gem-option { cursor: pointer; }
+        .gem-option input { display: none; }
+        .gem-option-card { padding: 16px; background: white; border: 2px solid #e2e8f0; border-radius: 12px; text-align: center; transition: all 0.2s; position: relative; }
+        .gem-option input:checked + .gem-option-card { border-color: #667eea; background: linear-gradient(135deg, #eef2ff, #e0e7ff); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2); }
+        .gem-option-card:hover { border-color: #cbd5e1; }
+        .gem-amount { display: block; font-size: 1.5rem; font-weight: 700; color: #1e293b; }
+        .gem-label { font-size: 0.8rem; color: #64748b; }
+        .gem-option-card.popular { border-color: #f59e0b; }
+        .gem-option input:checked + .gem-option-card.popular { border-color: #f59e0b; background: linear-gradient(135deg, #fffbeb, #fef3c7); }
+        .popular-badge { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #f59e0b, #d97706); color: white; font-size: 0.7rem; font-weight: 600; padding: 3px 10px; border-radius: 50px; }
+        
+        .gem-reward-selector > small { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 0.85rem; }
+        
+        /* ===== FORM ACTIONS ===== */
+        .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid #f1f5f9; margin-top: 8px; }
+        
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .forum-create-container { padding: 20px 16px; }
+            .forum-create-header, .forum-create-form { padding: 24px 20px; }
+            .gem-reward-options { grid-template-columns: repeat(2, 1fr); }
+            .form-actions { flex-direction: column; }
+            .form-actions .btn { width: 100%; justify-content: center; }
+        }
+        
+        @media (max-width: 480px) {
+            .forum-create-header h1 { font-size: 1.5rem; }
+        }
+    </style>
 </head>
 <body class="forum-page">
     <?php include __DIR__ . '/student-navbar.php'; ?>
@@ -146,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <?php if (!empty($errors)): ?>
-            <div class="alert alert-error">
+            <div class="alert alert-error" style="margin: 24px 32px 0;">
                 <i class="bi bi-exclamation-circle"></i>
                 <ul>
                     <?php foreach ($errors as $error): ?>
@@ -321,9 +438,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const initialValue = hiddenInput.value;
     if (initialValue) {
         const initialOption = customSelect.querySelector(`[data-value="${initialValue}"]`);
-        if (initialOption) {
-            initialOption.click();
-        }
+        if (initialOption) initialOption.click();
     }
 
     // ===== FILE UPLOAD =====
@@ -338,9 +453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         dropZone.classList.add('dragover');
     });
     
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
-    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
     
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
@@ -353,7 +466,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     function updateFileList() {
         fileList.innerHTML = '';
-        Array.from(fileInput.files).forEach((file, index) => {
+        Array.from(fileInput.files).forEach((file) => {
             const item = document.createElement('div');
             item.className = 'file-item';
             
