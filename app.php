@@ -1,5 +1,5 @@
 <?php
-// app.php - Simple Router untuk struktur flat (updated)
+// app.php - Simple Router untuk struktur flat (updated with PAYMENT ROUTES)
 
 declare(strict_types=1);
 
@@ -88,6 +88,8 @@ $staticRoutes = [
     'dashboard' => 'student-dashboard.php',
     'diskusi' => 'student-diskusi.php',
     'settings' => 'student-settings.php',
+    'sessions' => 'student-sessions.php',
+    'gems' => 'student-gems-purchase.php',
 
     // ===== FORUM =====
     'forum' => 'student-forum.php',
@@ -100,19 +102,20 @@ $staticRoutes = [
     'mentor/login' => 'mentor-login.php',
     'mentor/register' => 'mentor-register.php',
     'mentor/dashboard' => 'mentor-dashboard.php',
-    'mentor/bookings' => 'mentor-bookings.php',
+    'mentor/sessions' => 'mentor-sessions.php',
     'mentor/chat' => 'mentor-chat.php',
     'mentor/profile' => 'mentor-profile.php',
     'mentor/settings' => 'mentor-settings.php',
-    'mentor/availability' => 'mentor-availability.php',
 
     // ===== ADMIN =====
     'admin/dashboard' => 'admin-dashboard.php',
-    'admin/users' => 'admin-users.php',
     'admin/mentors' => 'admin-mentors.php',
-    'admin/transactions' => 'admin-transactions.php',
-    'admin/settings' => 'admin-settings.php',
-    'admin/reports' => 'admin-reports.php',
+
+    // ===== PAYMENT ROUTES (NEW!) =====
+    'payment-process.php' => 'payment-process.php',
+    'payment-direct-update.php' => 'payment-direct-update.php',
+    'payment-cancel.php' => 'payment-cancel.php',
+    
 
     // ===== API =====
     'api/forum/upvote' => 'api-forum-upvote.php',
@@ -145,6 +148,11 @@ if (preg_match('#^forum/edit/(\d+)$#', $request, $m) === 1) {
 if (preg_match('#^forum/thread/(\d+)$#', $request, $m) === 1) {
     $_GET['id'] = $m[1];
     includeRouteFile('student-forum-thread.php');
+}
+
+if (preg_match('#^book-session/(\d+)$#', $request, $m) === 1) {
+    $_GET['mentor_id'] = $m[1];
+    includeRouteFile('book-session.php');
 }
 
 // 3) Default 404

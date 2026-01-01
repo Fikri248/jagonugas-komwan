@@ -81,6 +81,13 @@ class NotificationHelper {
             'icon'  => 'check-square',
             'color' => '#0ea5e9'
         ],
+
+        // ====== Gem Purchase (BARU) ======
+        'gem_purchase' => [
+            'title' => 'Pembelian Gem Berhasil! 💎',
+            'icon'  => 'gem',
+            'color' => '#10b981'
+        ],
     ];
 
     public function __construct($pdo) {
@@ -242,7 +249,6 @@ class NotificationHelper {
 
     // ====== NOTIFIKASI BARU (BOOKING MENTOR/STUDENT) ======
 
-    // Saat mahasiswa membuat booking baru → kirim ke mentor
     public function bookingCreated($mentorId, $studentName, $sessionId) {
         return $this->create(
             $mentorId,
@@ -253,7 +259,6 @@ class NotificationHelper {
         );
     }
 
-    // Saat mentor menerima booking → kirim ke mahasiswa
     public function bookingAccepted($studentId, $mentorName, $sessionId) {
         return $this->create(
             $studentId,
@@ -264,7 +269,6 @@ class NotificationHelper {
         );
     }
 
-    // Saat mentor menolak booking → kirim ke mahasiswa
     public function bookingRejected($studentId, $mentorName, $sessionId) {
         return $this->create(
             $studentId,
@@ -275,7 +279,6 @@ class NotificationHelper {
         );
     }
 
-    // Saat sesi selesai → kirim ke mahasiswa
     public function bookingCompleted($studentId, $mentorName, $sessionId) {
         return $this->create(
             $studentId,
@@ -283,6 +286,21 @@ class NotificationHelper {
             'Sesi dengan ' . $mentorName . ' telah selesai. Jangan lupa beri rating ya!',
             $sessionId,
             'session'
+        );
+    }
+
+    // ====== NOTIFIKASI GEM PURCHASE (BARU) ======
+
+    /**
+     * Notifikasi pembelian gem berhasil
+     */
+    public function gemPurchase($userId, $gemsAmount, $totalGems, $transactionId) {
+        return $this->create(
+            $userId,
+            'gem_purchase',
+            'Selamat! Kamu berhasil membeli ' . number_format($gemsAmount) . ' gems. Saldo gem kamu sekarang: ' . number_format($totalGems) . ' gems.',
+            $transactionId,
+            'gem_transaction'
         );
     }
 
