@@ -220,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     name="email"
                     class="auth-input"
                     value="<?php echo htmlspecialchars($oldEmail); ?>"
-                    placeholder="contoh@student.telkomuniversity.ac.id"
+                    placeholder="contohnya emailgoogle@gmail.com"
                     required
                 >
             </div>

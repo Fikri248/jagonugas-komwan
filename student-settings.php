@@ -34,7 +34,22 @@ if (!$user) {
     exit;
 }
 
-// Helper: Get Avatar URL (handle Google URL & local path)
+// Daftar Program Studi
+$programStudiList = [
+    'S1 Informatika',
+    'S1 Sistem Informasi',
+    'S1 Teknologi Informasi',
+    'S1 Rekayasa Perangkat Lunak',
+    'S1 Sains Data',
+    'S1 Bisnis Digital',
+    'S1 Teknik Elektro',
+    'S1 Teknik Telekomunikasi',
+    'S1 Teknik Komputer',
+    'S1 Teknik Industri',
+    'S1 Teknik Logistik'
+];
+
+// Helper: Get Avatar URL
 function get_avatar_url($avatar, $base = '') {
     if (empty($avatar)) return '';
     if (filter_var($avatar, FILTER_VALIDATE_URL)) return $avatar;
@@ -107,25 +122,71 @@ if (isset($_POST['remove_photo'])) {
     $notif->profileUpdated($userId, 'foto profil');
 }
 
-// Handle Update Name
-if (isset($_POST['update_name'])) {
+// Handle Update Profile (Name, Program Studi, Semester)
+if (isset($_POST['update_profile'])) {
     $newName = trim($_POST['name'] ?? '');
-    $oldName = $user['name'];
+    $newProgramStudi = trim($_POST['program_studi'] ?? '');
+    $newSemester = (int)($_POST['semester'] ?? 0);
+    
+    $errors = [];
     
     if (empty($newName)) {
-        $errorMsg = 'Nama tidak boleh kosong.';
+        $errors[] = 'Nama tidak boleh kosong.';
     } elseif (strlen($newName) < 3) {
-        $errorMsg = 'Nama minimal 3 karakter.';
-    } elseif ($newName === $oldName) {
-        header("Location: " . $BASE . "/student-dashboard.php");
-        exit;
+        $errors[] = 'Nama minimal 3 karakter.';
+    }
+    
+    if (!empty($newProgramStudi) && !in_array($newProgramStudi, $programStudiList)) {
+        $errors[] = 'Program studi tidak valid.';
+    }
+    
+    if ($newSemester !== 0 && ($newSemester < 1 || $newSemester > 14)) {
+        $errors[] = 'Semester harus antara 1 sampai 14.';
+    }
+    
+    if (!empty($errors)) {
+        $errorMsg = implode(' ', $errors);
     } else {
-        $stmt = $pdo->prepare("UPDATE users SET name = ? WHERE id = ?");
-        $stmt->execute([$newName, $userId]);
-        $_SESSION['name'] = $newName;
-        $notif->profileUpdated($userId, 'nama');
-        header("Location: " . $BASE . "/student-dashboard.php?profile_updated=1");
-        exit;
+        $hasChanges = false;
+        $updates = [];
+        $params = [];
+        
+        if ($newName !== $user['name']) {
+            $updates[] = "name = ?";
+            $params[] = $newName;
+            $hasChanges = true;
+        }
+        
+        $currentProdi = $user['program_studi'] ?? '';
+        if ($newProgramStudi !== $currentProdi) {
+            $updates[] = "program_studi = ?";
+            $params[] = $newProgramStudi ?: null;
+            $hasChanges = true;
+        }
+        
+        $currentSemester = (int)($user['semester'] ?? 0);
+        if ($newSemester !== $currentSemester) {
+            $updates[] = "semester = ?";
+            $params[] = $newSemester ?: null;
+            $hasChanges = true;
+        }
+        
+        if ($hasChanges && !empty($updates)) {
+            $params[] = $userId;
+            $sql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            
+            $_SESSION['name'] = $newName;
+            $user['name'] = $newName;
+            $user['program_studi'] = $newProgramStudi;
+            $user['semester'] = $newSemester;
+            
+            $notif->profileUpdated($userId, 'profil');
+            $successMsg = 'Profil berhasil diperbarui!';
+        } else {
+            $successMsg = 'Tidak ada perubahan.';
+        }
     }
 }
 
@@ -194,11 +255,13 @@ $gemBalance = $user['gems'] ?? 0;
         .settings-header h1 i { color: #667eea; }
         .settings-header p { color: #64748b; }
         .settings-grid { display: flex; flex-direction: column; gap: 24px; }
-        .settings-card { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06); overflow: hidden; }
+        
+        /* FIX: overflow visible supaya dropdown tidak kepotong */
+        .settings-card { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06); overflow: visible; }
         .settings-card-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
         .settings-card-header h2 { font-size: 1.1rem; font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 10px; margin: 0; }
         .settings-card-header h2 i { color: #667eea; font-size: 1.2rem; }
-        .settings-card-body { padding: 24px; }
+        .settings-card-body { padding: 24px; overflow: visible; }
         
         /* ===== PROFILE PHOTO SECTION ===== */
         .profile-photo-section { display: flex; gap: 24px; align-items: flex-start; }
@@ -225,13 +288,36 @@ $gemBalance = $user['gems'] ?? 0;
         
         /* ===== FORM STYLES ===== */
         .settings-form { display: flex; flex-direction: column; gap: 20px; }
-        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; position: relative; }
+        .form-group.full-width { grid-column: 1 / -1; }
         .form-group label { font-size: 0.9rem; font-weight: 600; color: #475569; }
         .form-input { width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 1rem; transition: all 0.2s; outline: none; background: white; box-sizing: border-box; }
         .form-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
         .form-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
         .form-hint { font-size: 0.85rem; color: #94a3b8; }
         .form-actions { padding-top: 8px; }
+        
+        /* ===== CUSTOM SELECT (Interactive Dropdown) ===== */
+        .custom-select { position: relative; width: 100%; font-size: 0.95rem; user-select: none; z-index: 10; }
+        .custom-select.active { z-index: 100; }
+        .select-selected { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .select-selected:hover { border-color: #cbd5e1; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .custom-select.active .select-selected { border-color: #667eea; background: #ffffff; box-shadow: 0 0 0 4px rgba(102,126,234,0.15), 0 8px 24px rgba(102,126,234,0.1); }
+        .select-text { color: #64748b; font-weight: 500; transition: color 0.2s; }
+        .select-text.has-value { color: #1e293b; font-weight: 600; }
+        .select-arrow { color: #94a3b8; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s; }
+        .custom-select.active .select-arrow { transform: rotate(180deg); color: #667eea; }
+        .select-items { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.12), 0 8px 16px rgba(0,0,0,0.08); max-height: 280px; overflow-y: auto; opacity: 0; visibility: hidden; transform: translateY(-10px) scale(0.98); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1000; padding: 8px; }
+        .custom-select.active .select-items { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+        .select-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; cursor: pointer; color: #475569; font-weight: 500; transition: all 0.2s ease; margin-bottom: 2px; }
+        .select-item:last-child { margin-bottom: 0; }
+        .select-item:hover { background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); color: #4338ca; transform: translateX(4px); }
+        .select-item.selected { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+        .select-item.selected:hover { transform: translateX(4px); color: #ffffff; }
+        .select-items::-webkit-scrollbar { width: 6px; }
+        .select-items::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .select-items::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 10px; }
         
         /* ===== ACCOUNT STATS ===== */
         .account-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -244,6 +330,10 @@ $gemBalance = $user['gems'] ?? 0;
         .stat-value { font-size: 1.1rem; font-weight: 700; color: #1e293b; }
         .stat-label { font-size: 0.85rem; color: #64748b; }
         
+        /* ===== INCOMPLETE PROFILE NOTICE ===== */
+        .incomplete-notice { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; padding: 14px 18px; border-radius: 12px; display: flex; align-items: center; gap: 10px; margin-bottom: 20px; border: 1px solid #fcd34d; }
+        .incomplete-notice i { font-size: 1.2rem; }
+        
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
             .profile-photo-section { flex-direction: column; align-items: center; text-align: center; }
@@ -251,9 +341,7 @@ $gemBalance = $user['gems'] ?? 0;
             .photo-buttons { justify-content: center; }
             .account-stats { grid-template-columns: 1fr; }
             .settings-container { padding: 20px 16px; }
-        }
-        @media (max-width: 560px) {
-            .profile-photo-section { flex-direction: column; align-items: center; text-align: center; }
+            .form-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -266,12 +354,19 @@ $gemBalance = $user['gems'] ?? 0;
             <p>Kelola profil dan keamanan akun kamu</p>
         </div>
 
+        <?php if (empty($user['program_studi']) || empty($user['semester'])): ?>
+        <div class="incomplete-notice">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>Lengkapi profil kamu! Program studi dan semester belum diisi.</span>
+        </div>
+        <?php endif; ?>
+
         <?php if ($successMsg): ?>
-        <div class="alert alert-success"><i class="bi bi-check-circle"></i> <?php echo $successMsg; ?></div>
+        <div class="alert alert-success"><i class="bi bi-check-circle"></i> <?php echo htmlspecialchars($successMsg); ?></div>
         <?php endif; ?>
 
         <?php if ($errorMsg): ?>
-        <div class="alert alert-error"><i class="bi bi-exclamation-circle"></i> <?php echo $errorMsg; ?></div>
+        <div class="alert alert-error"><i class="bi bi-exclamation-circle"></i> <?php echo htmlspecialchars($errorMsg); ?></div>
         <?php endif; ?>
 
         <div class="settings-grid">
@@ -334,7 +429,7 @@ $gemBalance = $user['gems'] ?? 0;
                 </div>
             </section>
 
-            <!-- Update Name Section -->
+            <!-- Update Profile Section -->
             <section class="settings-card">
                 <div class="settings-card-header">
                     <h2><i class="bi bi-person-badge"></i> Informasi Profil</h2>
@@ -346,14 +441,60 @@ $gemBalance = $user['gems'] ?? 0;
                             <input type="text" id="name" name="name" class="form-input" 
                                    value="<?php echo htmlspecialchars($user['name']); ?>" required>
                         </div>
+                        
                         <div class="form-group">
                             <label for="email">Email</label>
                             <input type="email" id="email" class="form-input" 
                                    value="<?php echo htmlspecialchars($user['email']); ?>" disabled>
                             <span class="form-hint">Email tidak dapat diubah.</span>
                         </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Program Studi</label>
+                                <div class="custom-select" data-name="program_studi">
+                                    <div class="select-selected">
+                                        <span class="select-text <?php echo !empty($user['program_studi']) ? 'has-value' : ''; ?>">
+                                            <?php echo !empty($user['program_studi']) ? htmlspecialchars($user['program_studi']) : 'Pilih Program Studi'; ?>
+                                        </span>
+                                        <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                    </div>
+                                    <div class="select-items">
+                                        <?php foreach ($programStudiList as $prodi): ?>
+                                            <div class="select-item <?php echo (($user['program_studi'] ?? '') === $prodi) ? 'selected' : ''; ?>" data-value="<?php echo htmlspecialchars($prodi); ?>">
+                                                <i class="bi bi-mortarboard-fill"></i>
+                                                <?php echo htmlspecialchars($prodi); ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <input type="hidden" name="program_studi" value="<?php echo htmlspecialchars($user['program_studi'] ?? ''); ?>">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Semester</label>
+                                <div class="custom-select" data-name="semester">
+                                    <div class="select-selected">
+                                        <span class="select-text <?php echo !empty($user['semester']) ? 'has-value' : ''; ?>">
+                                            <?php echo !empty($user['semester']) ? 'Semester ' . htmlspecialchars((string)$user['semester']) : 'Pilih Semester'; ?>
+                                        </span>
+                                        <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                                    </div>
+                                    <div class="select-items">
+                                        <?php for ($i = 1; $i <= 14; $i++): ?>
+                                            <div class="select-item <?php echo ((int)($user['semester'] ?? 0)) === $i ? 'selected' : ''; ?>" data-value="<?php echo $i; ?>">
+                                                <i class="bi bi-book-fill"></i>
+                                                Semester <?php echo $i; ?>
+                                            </div>
+                                        <?php endfor; ?>
+                                    </div>
+                                    <input type="hidden" name="semester" value="<?php echo htmlspecialchars((string)($user['semester'] ?? '')); ?>">
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="form-actions">
-                            <button type="submit" name="update_name" class="btn btn-primary">
+                            <button type="submit" name="update_profile" class="btn btn-primary">
                                 <i class="bi bi-check-lg"></i> Simpan Perubahan
                             </button>
                         </div>
@@ -439,6 +580,7 @@ $gemBalance = $user['gems'] ?? 0;
     </div>
 
     <script>
+    // Avatar Upload Preview
     document.getElementById('avatarInput').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
@@ -453,6 +595,54 @@ $gemBalance = $user['gems'] ?? 0;
             };
             reader.readAsDataURL(file);
         }
+    });
+
+    // Custom Select Logic
+    document.addEventListener('DOMContentLoaded', function() {
+        const customSelects = document.querySelectorAll('.custom-select');
+        
+        customSelects.forEach(select => {
+            const selected = select.querySelector('.select-selected');
+            const hiddenInput = select.querySelector('input[type="hidden"]');
+            const selectText = select.querySelector('.select-text');
+
+            selected.addEventListener('click', function(e) {
+                e.stopPropagation();
+                customSelects.forEach(s => { 
+                    if (s !== select) s.classList.remove('active'); 
+                });
+                select.classList.toggle('active');
+            });
+
+            select.querySelectorAll('.select-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const value = this.dataset.value;
+                    const clone = this.cloneNode(true);
+                    const icon = clone.querySelector('i');
+                    if (icon) icon.remove();
+                    const text = clone.textContent.trim();
+
+                    hiddenInput.value = value;
+                    selectText.textContent = text;
+                    selectText.classList.add('has-value');
+
+                    select.querySelectorAll('.select-item').forEach(i => i.classList.remove('selected'));
+                    this.classList.add('selected');
+                    
+                    setTimeout(() => select.classList.remove('active'), 150);
+                });
+            });
+        });
+
+        document.addEventListener('click', () => {
+            customSelects.forEach(s => s.classList.remove('active'));
+        });
+        
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                customSelects.forEach(s => s.classList.remove('active'));
+            }
+        });
     });
     </script>
 </body>
