@@ -20,10 +20,10 @@ class Database {
         // Kalau ENV tersedia, selalu pakai ini (untuk Docker/Jenkins/Azure)
         if (!empty($envHost) && !empty($envName) && !empty($envUser)) {
             // === CONFIG DARI ENV (Docker / Azure) ===
-            $this->host     = $envHost;                     // contoh: db
-            $this->db_name  = $envName;                    // jagonugas_db
-            $this->username = $envUser;                    // jagonugas_user
-            $this->password = $envPass ?? '';              // secretpassword
+            $this->host     = $envHost;
+            $this->db_name  = $envName;
+            $this->username = $envUser;
+            $this->password = $envPass ?? '';
             $this->port     = $envPort ? (int)$envPort : 3306;
             return;
         }
@@ -65,8 +65,12 @@ class Database {
                 ]
             );
 
-            // DEBUG OPSIONAL: cek host yang dipakai
-            // error_log("DB CONNECT TO {$this->host}:{$this->port} / {$this->db_name} ({$this->username})");
+            // =====================================================
+            // FIX TIMEZONE: Set MySQL session ke Asia/Jakarta (UTC+7)
+            // Ini memastikan NOW(), CURRENT_TIMESTAMP, dan default
+            // values menggunakan waktu Jakarta, bukan UTC
+            // =====================================================
+            $this->conn->exec("SET time_zone = '+07:00'");
 
         } catch (PDOException $e) {
             // Di dev bisa pakai die(), di prod sebaiknya log saja
