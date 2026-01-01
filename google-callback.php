@@ -48,17 +48,30 @@ function redirectWithError(string $message, string $base, string $action = 'logi
     exit;
 }
 
-// Validasi state
+/**
+ * Cleanup session oauth data
+ */
+function cleanupOAuthSession(): void {
+    unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+}
+
+// =====================================================
+// VALIDASI PARAMETER
+// =====================================================
 if (!isset($_GET['state']) || $_GET['state'] !== ($_SESSION['google_oauth_state'] ?? '')) {
-    redirectWithError('Invalid state parameter', $BASE, $action);
+    error_log('Google OAuth: Invalid state parameter');
+    redirectWithError('Sesi tidak valid. Silakan coba lagi.', $BASE, $action);
 }
 
 if (isset($_GET['error'])) {
-    redirectWithError('Google login dibatalkan', $BASE, $action);
+    $errorDesc = $_GET['error_description'] ?? $_GET['error'];
+    error_log('Google OAuth Error: ' . $errorDesc);
+    redirectWithError('Login Google dibatalkan.', $BASE, $action);
 }
 
 if (!isset($_GET['code'])) {
-    redirectWithError('Authorization code tidak ditemukan', $BASE, $action);
+    error_log('Google OAuth: Missing authorization code');
+    redirectWithError('Kode otorisasi tidak ditemukan.', $BASE, $action);
 }
 
 $code = $_GET['code'];
@@ -77,26 +90,42 @@ try {
     ];
 
     $ch = curl_init($tokenUrl);
+    if ($ch === false) {
+        throw new RuntimeException('Gagal inisialisasi CURL');
+    }
+    
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($tokenData),
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded']
     ]);
+    
     $tokenResponse = curl_exec($ch);
+    $curlError = curl_error($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
+    if ($tokenResponse === false) {
+        error_log('Google OAuth CURL Error: ' . $curlError);
+        throw new RuntimeException('Gagal terhubung ke Google: ' . $curlError);
+    }
+
     if ($httpCode !== 200) {
-        error_log('Google Token Error: ' . $tokenResponse);
-        redirectWithError('Gagal mendapatkan access token', $BASE, $action);
+        error_log('Google Token Error [HTTP ' . $httpCode . ']: ' . $tokenResponse);
+        throw new RuntimeException('Gagal mendapatkan token dari Google');
     }
 
     $tokenResult = json_decode($tokenResponse, true);
-    $accessToken = $tokenResult['access_token'] ?? null;
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new RuntimeException('Respons token tidak valid');
+    }
 
+    $accessToken = $tokenResult['access_token'] ?? null;
     if (!$accessToken) {
-        redirectWithError('Access token tidak valid', $BASE, $action);
+        error_log('Google OAuth: No access token in response');
+        throw new RuntimeException('Access token tidak ditemukan');
     }
 
     // =====================================================
@@ -104,30 +133,46 @@ try {
     // =====================================================
     $userInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo';
     $ch = curl_init($userInfoUrl);
+    if ($ch === false) {
+        throw new RuntimeException('Gagal inisialisasi CURL untuk user info');
+    }
+    
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $accessToken]
     ]);
+    
     $userResponse = curl_exec($ch);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
-    $googleUser = json_decode($userResponse, true);
+    if ($userResponse === false) {
+        error_log('Google UserInfo CURL Error: ' . $curlError);
+        throw new RuntimeException('Gagal mendapatkan info user: ' . $curlError);
+    }
 
-    if (!isset($googleUser['email'])) {
-        redirectWithError('Gagal mendapatkan info user dari Google', $BASE, $action);
+    $googleUser = json_decode($userResponse, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !isset($googleUser['email'])) {
+        error_log('Google OAuth: Invalid user info response - ' . $userResponse);
+        throw new RuntimeException('Data user dari Google tidak valid');
     }
 
     $email    = strtolower(trim($googleUser['email']));
-    $name     = $googleUser['name'] ?? '';
+    $name     = trim($googleUser['name'] ?? '');
     $googleId = $googleUser['id'] ?? '';
     $picture  = $googleUser['picture'] ?? '';
 
+    // Fallback name dari email
+    if (empty($name)) {
+        $name = explode('@', $email)[0];
+    }
+
     // =====================================================
-    // STEP 3: Handle berdasarkan action
+    // STEP 3: Database lookup
     // =====================================================
     $db = (new Database())->getConnection();
 
-    // Cek user by email (case-insensitive)
     $stmt = $db->prepare("SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1");
     $stmt->execute([$email]);
     $existingUser = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -136,36 +181,24 @@ try {
     // ACTION: MENTOR REGISTER
     // =====================================================
     if ($action === 'mentor-register') {
-        if ($existingUser) {
-            if ($existingUser['role'] === 'mentor') {
-                unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
-                header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Email sudah terdaftar sebagai mentor. Silakan login.'));
-                exit;
-            } else {
-                // Upgrade existing user ke mentor
-                $_SESSION['google_prefill_mentor'] = [
-                    'name'      => $existingUser['name'],
-                    'email'     => $existingUser['email'],
-                    'google_id' => $googleId,
-                    'avatar'    => $existingUser['avatar'] ?: $picture,
-                    'user_id'   => $existingUser['id'],
-                ];
-                unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
-                header('Location: ' . $BASE . '/complete-mentor-profile.php');
-                exit;
-            }
-        } else {
-            // User baru
-            $_SESSION['google_prefill_mentor'] = [
-                'name'      => $name,
-                'email'     => $email,
-                'google_id' => $googleId,
-                'avatar'    => $picture,
-            ];
-            unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
-            header('Location: ' . $BASE . '/complete-mentor-profile.php');
+        if ($existingUser && $existingUser['role'] === 'mentor') {
+            cleanupOAuthSession();
+            header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Email sudah terdaftar sebagai mentor. Silakan login.'));
             exit;
         }
+        
+        // Simpan data ke session untuk complete-mentor-profile.php
+        $_SESSION['google_prefill_mentor'] = [
+            'name'      => $existingUser['name'] ?? $name,
+            'email'     => $existingUser['email'] ?? $email,
+            'google_id' => $googleId,
+            'avatar'    => ($existingUser['avatar'] ?? '') ?: $picture,
+            'user_id'   => $existingUser['id'] ?? null,
+        ];
+        
+        cleanupOAuthSession();
+        header('Location: ' . $BASE . '/complete-mentor-profile.php');
+        exit;
     }
 
     // =====================================================
@@ -173,19 +206,19 @@ try {
     // =====================================================
     if ($action === 'mentor-login') {
         if (!$existingUser) {
-            unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+            cleanupOAuthSession();
             header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun tidak ditemukan. Silakan daftar terlebih dahulu.'));
             exit;
         }
 
         if ($existingUser['role'] !== 'mentor') {
-            unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+            cleanupOAuthSession();
             header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun ini bukan akun mentor. Silakan login di halaman utama.'));
             exit;
         }
 
         if (isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
-            unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+            cleanupOAuthSession();
             header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun mentor belum diverifikasi. Mohon tunggu 1x24 jam.'));
             exit;
         }
@@ -206,20 +239,20 @@ try {
         $_SESSION['avatar']     = $existingUser['avatar'] ?: $picture;
         $_SESSION['login_time'] = time();
 
-        unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+        cleanupOAuthSession();
         header('Location: ' . $BASE . '/mentor-dashboard.php');
         exit;
     }
 
     // =====================================================
-    // ACTION: LOGIN / REGISTER STUDENT (default)
+    // ACTION: STUDENT LOGIN / REGISTER (default)
     // =====================================================
     if ($existingUser) {
         // USER SUDAH ADA - LANGSUNG LOGIN
         
-        // Cek kalau mentor belum verified, tolak
+        // Mentor belum verified
         if ($existingUser['role'] === 'mentor' && isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
-            unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+            cleanupOAuthSession();
             header('Location: ' . $BASE . '/login.php?error=' . urlencode('Akun mentor belum diverifikasi. Mohon tunggu 1x24 jam.'));
             exit;
         }
@@ -257,46 +290,44 @@ try {
         $_SESSION['avatar']     = $existingUser['avatar'] ?: $picture;
         $_SESSION['login_time'] = time();
 
-        unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
+        cleanupOAuthSession();
 
-        // Redirect ke dashboard sesuai role
-        if ($existingUser['role'] === 'admin') {
-            header('Location: ' . $BASE . '/admin-dashboard.php');
-        } elseif ($existingUser['role'] === 'mentor') {
-            header('Location: ' . $BASE . '/mentor-dashboard.php');
-        } else {
-            header('Location: ' . $BASE . '/student-dashboard.php');
+        // Redirect sesuai role
+        switch ($existingUser['role']) {
+            case 'admin':
+                header('Location: ' . $BASE . '/admin-dashboard.php');
+                break;
+            case 'mentor':
+                header('Location: ' . $BASE . '/mentor-dashboard.php');
+                break;
+            default:
+                header('Location: ' . $BASE . '/student-dashboard.php');
         }
         exit;
 
     } else {
-        // USER BARU - Auto register sebagai student
-        $randomPassword = bin2hex(random_bytes(16));
-        $hashedPassword = password_hash($randomPassword, PASSWORD_DEFAULT);
-        
-        $stmt = $db->prepare("
-            INSERT INTO users (name, email, password, role, google_id, avatar, gems, created_at) 
-            VALUES (?, ?, ?, 'student', ?, ?, 100, NOW())
-        ");
-        $stmt->execute([$name ?: explode('@', $email)[0], $email, $hashedPassword, $googleId, $picture]);
-        $newUserId = $db->lastInsertId();
+        // USER BARU - Redirect ke complete-profile.php
+        $_SESSION['google_prefill'] = [
+            'name'      => $name,
+            'email'     => $email,
+            'google_id' => $googleId,
+            'avatar'    => $picture,
+        ];
 
-        session_regenerate_id(true);
-        $_SESSION['user_id']    = $newUserId;
-        $_SESSION['name']       = $name ?: explode('@', $email)[0];
-        $_SESSION['email']      = $email;
-        $_SESSION['role']       = 'student';
-        $_SESSION['gems']       = 100;
-        $_SESSION['avatar']     = $picture;
-        $_SESSION['login_time'] = time();
-
-        unset($_SESSION['google_oauth_state'], $_SESSION['google_auth_action']);
-
-        header('Location: ' . $BASE . '/student-dashboard.php');
+        cleanupOAuthSession();
+        header('Location: ' . $BASE . '/complete-profile.php');
         exit;
     }
 
+} catch (PDOException $e) {
+    error_log('Google OAuth Database Error: ' . $e->getMessage() . ' | Code: ' . $e->getCode());
+    redirectWithError('Kesalahan database. Silakan coba lagi.', $BASE, $action);
+
+} catch (RuntimeException $e) {
+    error_log('Google OAuth Runtime Error: ' . $e->getMessage());
+    redirectWithError($e->getMessage(), $BASE, $action);
+
 } catch (Throwable $e) {
-    error_log('Google OAuth Error: ' . $e->getMessage());
+    error_log('Google OAuth Error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ':' . $e->getLine());
     redirectWithError('Terjadi kesalahan. Silakan coba lagi.', $BASE, $action);
 }
