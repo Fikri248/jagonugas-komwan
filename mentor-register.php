@@ -399,7 +399,7 @@ $isGoogleRegister = !empty($prefillGoogleId);
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" class="auth-input" 
                         value="<?php echo htmlspecialchars($prefillEmail); ?>" 
-                        placeholder="email@telkomuniversity.ac.id" 
+                        placeholder="emailgoogle@gmail.com" 
                         <?php echo $isGoogleRegister ? 'readonly' : ''; ?> required>
                 </div>
             </div>
