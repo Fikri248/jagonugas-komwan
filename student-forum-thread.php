@@ -1,5 +1,5 @@
 <?php
-// student-forum-thread.php - v2 (Badge Mentor + Rating Best Answer)
+// student-forum-thread.php - v2.2 (Fix: Owner bisa reply setelah ada jawaban orang lain)
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -101,10 +101,10 @@ if (isset($_POST['delete_thread']) && $isOwner) {
     }
 }
 
-// Increment views
+// v2.1 FIX: Increment views WITHOUT triggering updated_at auto-update
 $viewKey = 'viewed_thread_' . $threadId;
 if (!isset($_SESSION[$viewKey])) {
-    $pdo->prepare("UPDATE forum_threads SET views = views + 1 WHERE id = ?")->execute([$threadId]);
+    $pdo->prepare("UPDATE forum_threads SET views = views + 1, updated_at = updated_at WHERE id = ?")->execute([$threadId]);
     $_SESSION[$viewKey] = true;
     $thread['views']++;
 }
@@ -132,7 +132,16 @@ foreach ($replies as &$reply) {
 }
 unset($reply);
 
-// Handle new reply - HANYA untuk non-owner
+// v2.2 NEW: Cek apakah ada reply dari orang lain (bukan owner)
+$hasOtherReplies = false;
+foreach ($replies as $r) {
+    if ($r['author_id'] != $thread['author_id']) {
+        $hasOtherReplies = true;
+        break;
+    }
+}
+
+// v2.2 UPDATE: Handle new reply - Owner BISA reply jika sudah ada jawaban dari orang lain
 $replyError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
     if (!$userId) {
@@ -140,9 +149,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
         exit;
     }
     
-    // Cegah owner menjawab thread sendiri
-    if ($isOwner) {
-        $replyError = "Kamu tidak bisa menjawab pertanyaanmu sendiri";
+    // v2.2 FIX: Owner boleh reply HANYA jika sudah ada jawaban dari orang lain
+    $canReply = !$isOwner || ($isOwner && $hasOtherReplies);
+    
+    if (!$canReply) {
+        $replyError = "Kamu tidak bisa menjawab pertanyaanmu sendiri sebelum ada jawaban dari pengguna lain";
     } else {
         $replyContent = trim($_POST['reply_content']);
         
@@ -182,8 +193,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
                     }
                 }
                 
-                $notif = new NotificationHelper($pdo);
-                $notif->newReplyToThread($thread['author_id'], $name, $threadId, $thread['title']);
+                // v2.2: Kirim notifikasi hanya jika yang reply BUKAN owner
+                if (!$isOwner) {
+                    $notif = new NotificationHelper($pdo);
+                    $notif->newReplyToThread($thread['author_id'], $name, $threadId, $thread['title']);
+                }
                 
                 $pdo->commit();
                 header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId&success=1#reply-$replyId");
@@ -201,9 +215,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_best_answer']) &
     $replyId = (int)$_POST['reply_id'];
     $rating = (int)$_POST['rating'];
     
-    // Validasi rating 3-5
     if ($rating < 3 || $rating > 5) {
-        $rating = 3; // Default minimum
+        $rating = 3;
     }
     
     $stmt = $pdo->prepare("SELECT fr.user_id, u.role FROM forum_replies fr JOIN users u ON fr.user_id = u.id WHERE fr.id = ? AND fr.thread_id = ?");
@@ -213,16 +226,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_best_answer']) &
     if ($replyData && $replyData['user_id'] != $userId) {
         $pdo->beginTransaction();
         try {
-            // Mark thread as solved
-            $pdo->prepare("UPDATE forum_threads SET is_solved = 1, best_answer_id = ? WHERE id = ?")->execute([$replyId, $threadId]);
-            
-            // Mark reply as best answer
+            $pdo->prepare("UPDATE forum_threads SET is_solved = 1, best_answer_id = ?, updated_at = updated_at WHERE id = ?")->execute([$replyId, $threadId]);
             $pdo->prepare("UPDATE forum_replies SET is_best_answer = 1 WHERE id = ?")->execute([$replyId]);
-            
-            // Give gems to answerer
             $pdo->prepare("UPDATE users SET gems = gems + ? WHERE id = ?")->execute([$thread['gem_reward'], $replyData['user_id']]);
             
-            // Jika penjawab adalah mentor, tambahkan rating ke total_rating dan increment review_count
             if ($replyData['role'] === 'mentor') {
                 $pdo->prepare("UPDATE users SET total_rating = total_rating + ?, review_count = review_count + 1 WHERE id = ?")->execute([$rating, $replyData['user_id']]);
             }
@@ -344,7 +351,6 @@ function time_elapsed($datetime) {
         .reply-author-name { font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .author-badge { background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #667eea; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
         
-        /* MENTOR BADGE */
         .mentor-badge { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
         .mentor-badge i { font-size: 0.7rem; }
         
@@ -385,10 +391,13 @@ function time_elapsed($datetime) {
         .thread-login-prompt i { font-size: 2rem; color: #cbd5e1; margin-bottom: 12px; display: block; }
         .thread-login-prompt a { color: #667eea; font-weight: 600; }
         
-        /* Owner info box */
         .thread-owner-info { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-radius: 16px; padding: 24px; text-align: center; border: 1px solid #bfdbfe; }
         .thread-owner-info i { font-size: 2rem; color: #3b82f6; margin-bottom: 12px; display: block; }
         .thread-owner-info p { color: #1e40af; font-weight: 500; }
+        
+        /* v2.2: Owner reply note */
+        .owner-reply-note { background: linear-gradient(135deg, #fef3c7, #fde68a); border: 1px solid #fcd34d; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; color: #92400e; font-size: 0.9rem; }
+        .owner-reply-note i { font-size: 1.1rem; }
         
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; opacity: 0; visibility: hidden; transition: all 0.3s; padding: 20px; }
         .modal-overlay.active { opacity: 1; visibility: visible; }
@@ -406,7 +415,6 @@ function time_elapsed($datetime) {
         .modal-actions { display: flex; gap: 12px; justify-content: center; }
         .modal-actions .btn { flex: 1; justify-content: center; }
         
-        /* ===== RATING STARS ===== */
         .rating-section { margin: 20px 0; }
         .rating-label { font-size: 0.9rem; color: #64748b; margin-bottom: 10px; display: block; }
         .star-rating { display: flex; gap: 8px; justify-content: center; }
@@ -416,7 +424,6 @@ function time_elapsed($datetime) {
         .star-rating label:hover ~ label,
         .star-rating input:checked ~ label { color: #fbbf24; }
         .star-rating:not(:hover) input:checked ~ label { color: #fbbf24; }
-        /* Reverse order for CSS sibling selector trick */
         .star-rating { flex-direction: row-reverse; justify-content: center; }
         .star-rating label:hover ~ label { color: #fbbf24; }
         
@@ -483,7 +490,13 @@ function time_elapsed($datetime) {
                         <span class="thread-author-name"><?php echo htmlspecialchars($thread['author_name']); ?></span>
                         <div class="thread-time">
                             <?php echo time_elapsed($thread['created_at']); ?>
-                            <?php if ($thread['updated_at'] && $thread['updated_at'] != $thread['created_at']): ?>
+                            <?php 
+                            $createdTime = strtotime($thread['created_at']);
+                            $updatedTime = strtotime($thread['updated_at']);
+                            $timeDiff = abs($updatedTime - $createdTime);
+                            
+                            if ($thread['updated_at'] && $timeDiff > 60):
+                            ?>
                             <span class="edited-badge">(diedit)</span>
                             <?php endif; ?>
                         </div>
@@ -616,13 +629,28 @@ function time_elapsed($datetime) {
             <?php endif; ?>
         </section>
 
-        <!-- FORM JAWABAN: Hanya muncul untuk NON-OWNER yang login -->
-        <?php if ($userId && !$isOwner): ?>
+        <!-- v2.2 FIX: FORM JAWABAN tampil jika:
+             1. Login + bukan owner (non-owner selalu bisa jawab)
+             2. Login + owner + sudah ada jawaban dari orang lain
+        -->
+        <?php 
+        $canShowReplyForm = $userId && (!$isOwner || ($isOwner && $hasOtherReplies));
+        ?>
+        
+        <?php if ($canShowReplyForm): ?>
         <section class="thread-reply-form" id="reply-form">
             <h3><i class="bi bi-reply"></i> Tulis Jawabanmu</h3>
             
             <?php if ($replyError): ?>
             <div class="alert alert-error"><i class="bi bi-exclamation-circle"></i> <?php echo $replyError; ?></div>
+            <?php endif; ?>
+            
+            <?php if ($isOwner): ?>
+            <!-- v2.2: Note untuk owner yang mau reply -->
+            <div class="owner-reply-note">
+                <i class="bi bi-info-circle"></i>
+                <span>Kamu bisa menambahkan komentar atau klarifikasi untuk jawabanmu.</span>
+            </div>
             <?php endif; ?>
             
             <form method="POST" enctype="multipart/form-data">
@@ -645,13 +673,13 @@ function time_elapsed($datetime) {
                 </div>
             </form>
         </section>
-        <?php elseif ($userId && $isOwner): ?>
-        <!-- Info untuk owner -->
+        <?php elseif ($userId && $isOwner && !$hasOtherReplies): ?>
+        <!-- v2.2: Owner belum ada yang jawab -> tampilkan info tunggu -->
         <div class="thread-owner-info">
             <i class="bi bi-info-circle"></i>
             <p>Ini adalah pertanyaanmu. Tunggu jawaban dari pengguna lain.</p>
         </div>
-        <?php else: ?>
+        <?php elseif (!$userId): ?>
         <!-- Belum login -->
         <div class="thread-login-prompt">
             <i class="bi bi-lock"></i>
@@ -681,14 +709,12 @@ function time_elapsed($datetime) {
     <?php endif; ?>
 
     <?php if ($isOwner && !$thread['is_solved']): ?>
-    <!-- MODAL BEST ANSWER WITH RATING -->
     <div class="modal-overlay" id="bestAnswerModal">
         <div class="modal-container">
             <div class="modal-icon success"><i class="bi bi-trophy"></i></div>
             <h3>Pilih Jawaban Terbaik?</h3>
             <p>Kamu yakin ingin memilih jawaban ini sebagai yang terbaik?</p>
             
-            <!-- Note untuk jawaban mentor -->
             <div class="mentor-answer-note" id="mentorNote" style="display: none;">
                 <i class="bi bi-patch-check-fill"></i>
                 <span>Jawaban dari Mentor! Berikan rating sebagai apresiasi.</span>
@@ -698,7 +724,6 @@ function time_elapsed($datetime) {
                 <input type="hidden" name="mark_best_answer" value="1">
                 <input type="hidden" name="reply_id" id="bestAnswerReplyId" value="">
                 
-                <!-- Rating Section (hanya untuk mentor) -->
                 <div class="rating-section" id="ratingSection" style="display: none;">
                     <span class="rating-label">Berikan rating untuk mentor ini (3-5 bintang):</span>
                     <div class="star-rating">
@@ -736,7 +761,6 @@ function time_elapsed($datetime) {
     function openBestAnswerModal(replyId, authorRole) {
         document.getElementById('bestAnswerReplyId').value = replyId;
         
-        // Show/hide rating section based on author role
         const ratingSection = document.getElementById('ratingSection');
         const mentorNote = document.getElementById('mentorNote');
         

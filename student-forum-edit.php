@@ -1,5 +1,5 @@
 <?php
-// student-forum-edit.php
+// student-forum-edit.php v1.1 - Fix: Eksplisit update timestamp saat edit
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -82,14 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $deleteAttachments = $_POST['delete_attachments'] ?? [];
     
-    $hasChanges = false;
-    if ($title !== $thread['title'] || 
+    // v1.1: Cek apakah ada perubahan konten yang signifikan
+    $hasContentChanges = (
+        $title !== $thread['title'] || 
         $content !== $thread['content'] || 
-        $categoryId !== (int)$thread['category_id'] ||
+        $categoryId !== (int)$thread['category_id']
+    );
+    
+    $hasAttachmentChanges = (
         !empty($deleteAttachments) ||
-        !empty($_FILES['attachments']['name'][0])) {
-        $hasChanges = true;
-    }
+        !empty($_FILES['attachments']['name'][0])
+    );
+    
+    $hasChanges = $hasContentChanges || $hasAttachmentChanges;
     
     if (empty($errors)) {
         if (!$hasChanges) {
@@ -100,9 +105,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             
-            $stmt = $pdo->prepare("UPDATE forum_threads SET title = ?, content = ?, category_id = ?, updated_at = NOW() WHERE id = ?");
+            // v1.1 FIX: Eksplisit set updated_at = NOW() agar label "(diedit)" muncul
+            // Ini akan membuat selisih updated_at - created_at > 60 detik
+            // sehingga student-forum-thread.php v2.1 akan menampilkan badge "(diedit)"
+            $stmt = $pdo->prepare("
+                UPDATE forum_threads 
+                SET title = ?, content = ?, category_id = ?, updated_at = NOW() 
+                WHERE id = ?
+            ");
             $stmt->execute([$title, $content, $categoryId, $threadId]);
             
+            // Handle delete existing attachments
             if (!empty($deleteAttachments)) {
                 foreach ($deleteAttachments as $attId) {
                     $stmt = $pdo->prepare("SELECT file_path FROM forum_attachments WHERE id = ? AND thread_id = ?");
@@ -118,6 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             
+            // Handle new attachments upload
             if (!empty($_FILES['attachments']['name'][0])) {
                 $uploadDir = __DIR__ . '/uploads/forum/';
                 if (!is_dir($uploadDir)) {
@@ -163,20 +177,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Edit Pertanyaan - JagoNugas</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
-        /* ===== RESET & BASE ===== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background: #f8fafc; min-height: 100vh; }
         
         .forum-page { background: #f8fafc; min-height: 100vh; }
         
-        /* ===== BUTTONS ===== */
         .btn { padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
         .btn-outline { border: 2px solid #e2e8f0; color: #64748b; background: white; }
         .btn-outline:hover { border-color: #667eea; color: #667eea; background: rgba(102, 126, 234, 0.05); }
         
-        /* Tombol Simpan */
         .btn-save { 
             background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
             color: white; 
@@ -191,16 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         .btn-save i { font-size: 1.1rem; }
         
-        /* ===== ALERTS ===== */
         .alert { padding: 16px 20px; border-radius: 12px; margin: 24px 32px 0; font-size: 0.9rem; }
         .alert-error { background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #dc2626; border: 1px solid #fecaca; }
         .alert-error ul { margin: 8px 0 0 20px; }
         .alert-error li { margin: 4px 0; }
         
-        /* ===== FORUM CREATE CONTAINER ===== */
         .forum-create-container { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
         
-        /* ===== FORUM CREATE CARD ===== */
         .forum-create-card { background: white; border-radius: 20px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06); overflow: hidden; }
         
         .forum-create-header { padding: 32px 32px 24px; border-bottom: 1px solid #f1f5f9; }
@@ -210,7 +218,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .back-link { display: inline-flex; align-items: center; gap: 6px; color: #64748b; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: all 0.2s; }
         .back-link:hover { color: #667eea; }
         
-        /* ===== FORM ===== */
         .forum-create-form { padding: 32px; }
         
         .form-group { margin-bottom: 24px; }
@@ -224,7 +231,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .form-group textarea:focus { border-color: #667eea; box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15); background: white; }
         .form-group textarea { resize: vertical; min-height: 160px; }
         
-        /* ===== CUSTOM SELECT DROPDOWN ===== */
         .custom-select-wrapper { position: relative; z-index: 100; }
         
         .custom-select { position: relative; }
@@ -251,11 +257,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .custom-select-trigger > span { color: #94a3b8; font-size: 0.95rem; }
         .custom-select-trigger.has-value > span { color: #1e293b; font-weight: 500; }
         
-        /* Icon chevron - STATIS, tidak interaktif */
         .custom-select-trigger .chevron-icon { 
             color: #94a3b8; 
             font-size: 1rem;
-            pointer-events: none; /* Tidak bisa diklik */
+            pointer-events: none;
             transition: transform 0.2s;
             margin-left: auto;
             flex-shrink: 0;
@@ -265,12 +270,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #667eea; 
         }
         
-        /* Selected Preview (icon + name) */
         .selected-preview { display: flex; align-items: center; gap: 12px; flex: 1; }
         .selected-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
         .selected-name { font-weight: 600; color: #1e293b; }
         
-        /* Dropdown Options */
         .custom-options { 
             position: absolute; 
             top: 100%; 
@@ -316,12 +319,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .option-name { font-weight: 600; color: #1e293b; font-size: 0.95rem; }
         .option-desc { font-size: 0.8rem; color: #64748b; }
         
-        /* Custom Scrollbar */
         .custom-options::-webkit-scrollbar { width: 6px; }
         .custom-options::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
         .custom-options::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 10px; }
         
-        /* ===== EXISTING ATTACHMENTS ===== */
         .existing-attachments { display: flex; flex-direction: column; gap: 12px; }
         .existing-attachment-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; transition: all 0.2s; }
         .existing-attachment-item:has(input:checked) { border-color: #ef4444; background: #fef2f2; }
@@ -334,7 +335,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .attachment-checkbox { position: relative; cursor: pointer; }
         .attachment-checkbox input { width: 20px; height: 20px; cursor: pointer; accent-color: #ef4444; }
         
-        /* ===== FILE UPLOAD ===== */
         .file-upload-area { border: 2px dashed #e2e8f0; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
         .file-upload-area:hover { border-color: #667eea; background: #f0f4ff; }
         .file-upload-area.dragover { border-color: #667eea; background: #eef2ff; transform: scale(1.01); }
@@ -352,14 +352,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .file-remove { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 4px; transition: all 0.2s; }
         .file-remove:hover { background: #fee2e2; color: #ef4444; }
         
-        /* ===== EDIT INFO ===== */
         .edit-info { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: linear-gradient(135deg, #eff6ff, #dbeafe); border-radius: 12px; color: #1e40af; font-size: 0.9rem; margin-bottom: 24px; }
         .edit-info i { font-size: 1.1rem; }
         
-        /* ===== FORM ACTIONS ===== */
         .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid #f1f5f9; margin-top: 8px; }
         
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
             .forum-create-container { padding: 20px 16px; }
             .forum-create-header, .forum-create-form { padding: 24px 20px; }
@@ -400,7 +397,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" enctype="multipart/form-data" class="forum-create-form">
-                <!-- Judul -->
                 <div class="form-group">
                     <label for="title">Judul Pertanyaan <span class="required">*</span></label>
                     <input type="text" id="title" name="title" 
@@ -409,7 +405,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            required>
                 </div>
 
-                <!-- Kategori Custom Dropdown -->
                 <div class="form-group">
                     <label>Kategori <span class="required">*</span></label>
                     <div class="custom-select-wrapper">
@@ -449,7 +444,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <!-- Detail Pertanyaan -->
                 <div class="form-group">
                     <label for="content">Detail Pertanyaan <span class="required">*</span></label>
                     <textarea id="content" name="content" rows="8" 
@@ -457,7 +451,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               required><?php echo htmlspecialchars($_POST['content'] ?? $thread['content']); ?></textarea>
                 </div>
 
-                <!-- Existing Attachments -->
                 <?php if (!empty($attachments)): ?>
                 <div class="form-group">
                     <label>Lampiran Saat Ini</label>
@@ -480,7 +473,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <?php endif; ?>
 
-                <!-- New Attachments -->
                 <div class="form-group">
                     <label>Tambah Lampiran Baru (Opsional)</label>
                     <div class="file-upload-area" id="dropZone">
@@ -493,13 +485,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div id="fileList" class="file-list"></div>
                 </div>
 
-                <!-- Info -->
                 <div class="edit-info">
                     <i class="bi bi-info-circle"></i>
                     <span>Gem reward tidak bisa diubah setelah pertanyaan dibuat.</span>
                 </div>
 
-                <!-- Actions -->
                 <div class="form-actions">
                     <a href="<?php echo $BASE; ?>/student-forum-thread.php?id=<?php echo $threadId; ?>" class="btn btn-outline">
                         Batal
@@ -513,25 +503,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-    // ===== CUSTOM SELECT DROPDOWN =====
     const customSelect = document.getElementById('categorySelect');
     const trigger = customSelect.querySelector('.custom-select-trigger');
     const options = customSelect.querySelectorAll('.custom-option');
     const hiddenInput = document.getElementById('categoryInput');
 
-    // Toggle dropdown saat klik trigger (termasuk icon chevron karena pointer-events: none)
     trigger.addEventListener('click', () => {
         customSelect.classList.toggle('open');
     });
 
-    // Tutup dropdown saat klik di luar
     document.addEventListener('click', (e) => {
         if (!customSelect.contains(e.target)) {
             customSelect.classList.remove('open');
         }
     });
 
-    // Handle pilih option
     options.forEach(option => {
         option.addEventListener('click', () => {
             options.forEach(opt => opt.classList.remove('selected'));
@@ -542,7 +528,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const color = option.dataset.color;
             const name = option.querySelector('.option-name').textContent;
             
-            // Update trigger content - icon chevron tetap statis
             trigger.innerHTML = `
                 <div class="selected-preview">
                     <div class="selected-icon" style="background: ${color}20; color: ${color}">
@@ -558,7 +543,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
     });
 
-    // ===== FILE UPLOAD =====
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('attachments');
     const fileList = document.getElementById('fileList');

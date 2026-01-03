@@ -1,5 +1,5 @@
 <?php
-// mentor-forum-thread.php - Thread detail khusus untuk Mentor
+// mentor-forum-thread.php v1.1 - Fix: Prevent false "edited" status
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -58,10 +58,11 @@ if (!$thread) {
     exit;
 }
 
-// Increment views
+// v1.1 FIX: Increment views WITHOUT triggering updated_at auto-update
 $viewKey = 'viewed_thread_' . $threadId;
 if (!isset($_SESSION[$viewKey])) {
-    $pdo->prepare("UPDATE forum_threads SET views = views + 1 WHERE id = ?")->execute([$threadId]);
+    // Eksplisit set updated_at = updated_at untuk mencegah ON UPDATE CURRENT_TIMESTAMP
+    $pdo->prepare("UPDATE forum_threads SET views = views + 1, updated_at = updated_at WHERE id = ?")->execute([$threadId]);
     $_SESSION[$viewKey] = true;
     $thread['views']++;
 }
@@ -129,6 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
                     }
                 }
             }
+            
+            // v1.1 FIX: JANGAN update updated_at thread saat ada reply baru
+            // Reply baru BUKAN edit konten thread, jadi tidak perlu update timestamp
             
             // Notify thread owner
             $notif = new NotificationHelper($pdo);
@@ -207,6 +211,7 @@ function time_elapsed($datetime) {
         .thread-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .thread-author-name { font-weight: 600; color: #1e293b; }
         .thread-time { font-size: 0.85rem; color: #94a3b8; }
+        .edited-badge { color: #64748b; font-style: italic; }
         .thread-text { color: #475569; line-height: 1.8; font-size: 1rem; white-space: pre-wrap; }
         
         .thread-attachments { margin-top: 24px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
@@ -334,7 +339,19 @@ function time_elapsed($datetime) {
                     </div>
                     <div>
                         <span class="thread-author-name"><?php echo htmlspecialchars($thread['author_name']); ?></span>
-                        <div class="thread-time"><?php echo time_elapsed($thread['created_at']); ?></div>
+                        <div class="thread-time">
+                            <?php echo time_elapsed($thread['created_at']); ?>
+                            <?php 
+                            // v1.1 FIX: Hanya tampilkan "(diedit)" jika updated_at berbeda LEBIH DARI 1 menit dari created_at
+                            $createdTime = strtotime($thread['created_at']);
+                            $updatedTime = strtotime($thread['updated_at']);
+                            $timeDiff = abs($updatedTime - $createdTime);
+                            
+                            if ($thread['updated_at'] && $timeDiff > 60): // Lebih dari 60 detik = benar-benar diedit
+                            ?>
+                            <span class="edited-badge">(diedit)</span>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
                 
