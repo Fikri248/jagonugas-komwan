@@ -1,5 +1,5 @@
 <?php
-// student-dashboard.php - v4.2 FIX MAX 2 CARDS + NO RIGHT SPACE
+// student-dashboard.php - v4.3 REMOVE CREATE BUTTON FROM EMPTY STATE
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
@@ -238,7 +238,7 @@ if ($pdo) {
         }
         .dash-questions-placeholder i { font-size: 3rem; color: #cbd5e1; margin-bottom: 16px; display: block; }
         .dash-questions-placeholder h3 { font-size: 1.1rem; color: #475569; margin-bottom: 8px; }
-        .dash-questions-placeholder p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px; }
+        .dash-questions-placeholder p { color: #94a3b8; font-size: 0.9rem; }
         
         /* Question Card */
         .dash-question-card { 
@@ -518,14 +518,12 @@ if ($pdo) {
             </div>
             
             <?php if (empty($myQuestions)): ?>
+            <!-- v4.3: TOMBOL BUAT PERTANYAAN DIHAPUS -->
             <div class="dash-questions-grid cols-1">
                 <div class="dash-questions-placeholder">
                     <i class="bi bi-chat-square-text"></i>
                     <h3>Belum Ada Pertanyaan</h3>
                     <p>Lo belum pernah bikin pertanyaan. Yuk mulai tanya sekarang!</p>
-                    <a href="<?php echo htmlspecialchars($BASE); ?>/student-forum-create.php" class="btn btn-primary">
-                        <i class="bi bi-plus-circle"></i> Buat Pertanyaan
-                    </a>
                 </div>
             </div>
             <?php else: ?>
