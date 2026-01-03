@@ -1,4 +1,7 @@
 <?php
+// mentor-session-action.php v3.1 - FIXED: Conversation sudah dibuat di booking, jangan INSERT lagi
+// Actions: accept (update status only), reject (delete conversation + refund), complete (set ended_at)
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -63,37 +66,38 @@ try {
                 throw new Exception('Sesi ini tidak dalam status pending.');
             }
 
-            // Ubah status jadi ongoing
-            $stmt = $pdo->prepare("UPDATE sessions SET status = 'ongoing' WHERE id = ?");
-            $stmt->execute([$session_id]);
-
-            // ===== AUTO CREATE CONVERSATION (jika belum ada) =====
-            $student_id = (int)$session['student_id'];
-
-            // Cek apakah sudah ada conversation mentor-student ini
+            // ===== v3.1: JANGAN INSERT CONVERSATION LAGI =====
+            // Conversation sudah dibuat otomatis di book-session.php v3.0
+            // Kita cuma perlu UPDATE status session ke ongoing
+            
+            // Validasi conversation sudah exist (untuk keamanan)
             $stmt = $pdo->prepare("
-                SELECT id 
-                FROM conversations 
-                WHERE mentor_id = ? AND student_id = ?
+                SELECT id FROM conversations 
+                WHERE session_id = ? 
                 LIMIT 1
             ");
-            $stmt->execute([$mentor_id, $student_id]);
+            $stmt->execute([$session_id]);
             $conv = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Jika belum ada, buat baru
+            
             if (!$conv) {
+                // Fallback: Kalau conversation belum ada (data lama sebelum v3.0)
+                // Baru bikin conversation
                 $stmt = $pdo->prepare("
-                    INSERT INTO conversations (mentor_id, student_id, created_at)
-                    VALUES (?, ?, NOW())
+                    INSERT INTO conversations (mentor_id, student_id, session_id, created_at, updated_at)
+                    VALUES (?, ?, ?, NOW(), NOW())
                 ");
-                $stmt->execute([$mentor_id, $student_id]);
+                $stmt->execute([$mentor_id, $session['student_id'], $session_id]);
             }
-            // ===== END AUTO CREATE CONVERSATION =====
+            // ===== END v3.1 FIX =====
+
+            // Ubah status session jadi ongoing
+            $stmt = $pdo->prepare("UPDATE sessions SET status = 'ongoing' WHERE id = ?");
+            $stmt->execute([$session_id]);
 
             // Notifikasi ke mahasiswa
             $notif->bookingAccepted($session['student_id'], $mentorName, $session_id);
 
-            NotificationHelper::setSuccess('Sesi berhasil diterima dan dimulai!');
+            NotificationHelper::setSuccess('Sesi berhasil diterima! Chat dengan mahasiswa sekarang.');
             break;
 
         case 'reject':
@@ -101,16 +105,30 @@ try {
                 throw new Exception('Sesi ini tidak dalam status pending.');
             }
 
+            // Ambil reject_reason dari form
+            $reject_reason = trim($_POST['reject_reason'] ?? '');
+            $reject_reason = $reject_reason !== '' ? $reject_reason : null;
+
             // Kembalikan gems ke student
             $stmt = $pdo->prepare("UPDATE users SET gems = gems + ? WHERE id = ?");
             $stmt->execute([$session['price'], $session['student_id']]);
 
-            // Update status
-            $stmt = $pdo->prepare("UPDATE sessions SET status = 'cancelled' WHERE id = ?");
+            // Update status + reject_reason
+            $stmt = $pdo->prepare("
+                UPDATE sessions 
+                SET status = 'cancelled', 
+                    reject_reason = ?
+                WHERE id = ?
+            ");
+            $stmt->execute([$reject_reason, $session_id]);
+
+            // Hapus conversation kalau session ditolak (opsional, tergantung bisnis logic)
+            // Kalau mau keep history, comment line ini
+            $stmt = $pdo->prepare("DELETE FROM conversations WHERE session_id = ?");
             $stmt->execute([$session_id]);
 
             // Notifikasi ke mahasiswa
-            $notif->bookingRejected($session['student_id'], $mentorName, $session_id);
+            $notif->bookingRejected($session['student_id'], $mentorName, $session_id, $reject_reason);
 
             NotificationHelper::setSuccess('Sesi ditolak. Gems dikembalikan ke mahasiswa.');
             break;
@@ -120,13 +138,23 @@ try {
                 throw new Exception('Sesi ini tidak dapat diselesaikan.');
             }
 
-            $stmt = $pdo->prepare("UPDATE sessions SET status = 'completed' WHERE id = ?");
+            // Update status + set ended_at = NOW()
+            $stmt = $pdo->prepare("
+                UPDATE sessions 
+                SET status = 'completed',
+                    ended_at = NOW()
+                WHERE id = ?
+            ");
             $stmt->execute([$session_id]);
+
+            // Transfer payment ke mentor
+            $stmt = $pdo->prepare("UPDATE users SET balance = balance + ? WHERE id = ?");
+            $stmt->execute([$session['price'], $mentor_id]);
 
             // Notifikasi ke mahasiswa
             $notif->bookingCompleted($session['student_id'], $mentorName, $session_id);
 
-            NotificationHelper::setSuccess('Sesi berhasil diselesaikan!');
+            NotificationHelper::setSuccess('Sesi selesai! Pembayaran telah ditransfer.');
             break;
     }
 

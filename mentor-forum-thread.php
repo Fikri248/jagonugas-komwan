@@ -1,5 +1,5 @@
 <?php
-// student-forum-thread.php - v2 (Badge Mentor + Rating Best Answer)
+// mentor-forum-thread.php - Thread detail khusus untuk Mentor
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -10,12 +10,18 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Cek login & role mentor
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'mentor') {
+    header('Location: ' . $BASE . '/mentor-login.php');
+    exit;
+}
+
 $threadId = (int)($_GET['id'] ?? 0);
-$userId = $_SESSION['user_id'] ?? null;
-$name = $_SESSION['name'] ?? 'Guest';
+$userId = $_SESSION['user_id'];
+$name = $_SESSION['name'] ?? 'Mentor';
 
 if (!$threadId) {
-    header("Location: " . $BASE . "/student-forum.php");
+    header("Location: " . $BASE . "/mentor-forum.php");
     exit;
 }
 
@@ -48,57 +54,8 @@ $stmt->execute([$threadId]);
 $thread = $stmt->fetch();
 
 if (!$thread) {
-    header("Location: " . $BASE . "/student-forum.php");
+    header("Location: " . $BASE . "/mentor-forum.php");
     exit;
-}
-
-// Cek apakah user adalah pemilik thread
-$isOwner = ($userId == $thread['author_id']);
-
-// Handle DELETE thread
-if (isset($_POST['delete_thread']) && $isOwner) {
-    $pdo->beginTransaction();
-    try {
-        $stmt = $pdo->prepare("SELECT DISTINCT user_id FROM forum_replies WHERE thread_id = ? AND user_id != ?");
-        $stmt->execute([$threadId, $userId]);
-        $repliers = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        $stmt = $pdo->prepare("SELECT file_path FROM forum_attachments WHERE thread_id = ?");
-        $stmt->execute([$threadId]);
-        $files = $stmt->fetchAll();
-        foreach ($files as $file) {
-            $filePath = __DIR__ . '/' . $file['file_path'];
-            if (file_exists($filePath)) unlink($filePath);
-        }
-        
-        $stmt = $pdo->prepare("SELECT ra.file_path FROM reply_attachments ra JOIN forum_replies fr ON ra.reply_id = fr.id WHERE fr.thread_id = ?");
-        $stmt->execute([$threadId]);
-        $replyFiles = $stmt->fetchAll();
-        foreach ($replyFiles as $file) {
-            $filePath = __DIR__ . '/' . $file['file_path'];
-            if (file_exists($filePath)) unlink($filePath);
-        }
-        
-        $pdo->prepare("DELETE ra FROM reply_attachments ra JOIN forum_replies fr ON ra.reply_id = fr.id WHERE fr.thread_id = ?")->execute([$threadId]);
-        $pdo->prepare("DELETE FROM forum_attachments WHERE thread_id = ?")->execute([$threadId]);
-        $pdo->prepare("DELETE FROM forum_upvotes WHERE reply_id IN (SELECT id FROM forum_replies WHERE thread_id = ?)")->execute([$threadId]);
-        $pdo->prepare("DELETE FROM forum_replies WHERE thread_id = ?")->execute([$threadId]);
-        
-        $gemsRefunded = 0;
-        if (!$thread['is_solved']) {
-            $pdo->prepare("UPDATE users SET gems = gems + ? WHERE id = ?")->execute([$thread['gem_reward'], $userId]);
-            $gemsRefunded = $thread['gem_reward'];
-        }
-        
-        $pdo->prepare("DELETE FROM forum_threads WHERE id = ?")->execute([$threadId]);
-        $pdo->commit();
-        
-        header("Location: " . $BASE . "/student-forum.php?deleted=1");
-        exit;
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        $deleteError = "Gagal menghapus thread";
-    }
 }
 
 // Increment views
@@ -114,15 +71,15 @@ $stmt = $pdo->prepare("SELECT * FROM forum_attachments WHERE thread_id = ?");
 $stmt->execute([$threadId]);
 $attachments = $stmt->fetchAll();
 
-// Get replies WITH role info
+// Get replies
 $stmt = $pdo->prepare("
     SELECT fr.*, u.name as author_name, u.id as author_id, u.avatar as author_avatar, u.role as author_role,
            (SELECT COUNT(*) FROM forum_upvotes WHERE reply_id = fr.id) as upvote_count,
-           " . ($userId ? "(SELECT COUNT(*) FROM forum_upvotes WHERE reply_id = fr.id AND user_id = ?) as user_upvoted" : "0 as user_upvoted") . "
+           (SELECT COUNT(*) FROM forum_upvotes WHERE reply_id = fr.id AND user_id = ?) as user_upvoted
     FROM forum_replies fr JOIN users u ON fr.user_id = u.id WHERE fr.thread_id = ?
     ORDER BY fr.is_best_answer DESC, fr.upvotes DESC, fr.created_at ASC
 ");
-$stmt->execute($userId ? [$userId, $threadId] : [$threadId]);
+$stmt->execute([$userId, $threadId]);
 $replies = $stmt->fetchAll();
 
 foreach ($replies as &$reply) {
@@ -132,117 +89,63 @@ foreach ($replies as &$reply) {
 }
 unset($reply);
 
-// Handle new reply - HANYA untuk non-owner
+// Handle new reply - Mentor bisa menjawab
 $replyError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply_content'])) {
-    if (!$userId) {
-        header("Location: " . $BASE . "/login.php?redirect=student-forum-thread.php?id=$threadId");
-        exit;
-    }
+    $replyContent = trim($_POST['reply_content']);
     
-    // Cegah owner menjawab thread sendiri
-    if ($isOwner) {
-        $replyError = "Kamu tidak bisa menjawab pertanyaanmu sendiri";
+    if (empty($replyContent)) {
+        $replyError = "Jawaban tidak boleh kosong";
+    } elseif (strlen($replyContent) < 10) {
+        $replyError = "Jawaban minimal 10 karakter";
     } else {
-        $replyContent = trim($_POST['reply_content']);
-        
-        if (empty($replyContent)) {
-            $replyError = "Jawaban tidak boleh kosong";
-        } elseif (strlen($replyContent) < 10) {
-            $replyError = "Jawaban minimal 10 karakter";
-        } else {
-            try {
-                $pdo->beginTransaction();
+        try {
+            $pdo->beginTransaction();
+            
+            $stmt = $pdo->prepare("INSERT INTO forum_replies (thread_id, user_id, content) VALUES (?, ?, ?)");
+            $stmt->execute([$threadId, $userId, $replyContent]);
+            $replyId = $pdo->lastInsertId();
+            
+            if (!empty($_FILES['attachments']['name'][0])) {
+                $uploadDir = __DIR__ . '/uploads/replies/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
                 
-                $stmt = $pdo->prepare("INSERT INTO forum_replies (thread_id, user_id, content) VALUES (?, ?, ?)");
-                $stmt->execute([$threadId, $userId, $replyContent]);
-                $replyId = $pdo->lastInsertId();
-                
-                if (!empty($_FILES['attachments']['name'][0])) {
-                    $uploadDir = __DIR__ . '/uploads/replies/';
-                    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
-                    
-                    foreach ($_FILES['attachments']['tmp_name'] as $key => $tmpName) {
-                        if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
-                            $fileName = $_FILES['attachments']['name'][$key];
-                            $fileSize = $_FILES['attachments']['size'][$key];
-                            $fileType = $_FILES['attachments']['type'][$key];
-                            
-                            if ($fileSize > 5 * 1024 * 1024) continue;
-                            
-                            $ext = pathinfo($fileName, PATHINFO_EXTENSION);
-                            $newName = uniqid() . '_' . time() . '.' . $ext;
-                            $filePath = 'uploads/replies/' . $newName;
-                            
-                            if (move_uploaded_file($tmpName, $uploadDir . $newName)) {
-                                $stmt = $pdo->prepare("INSERT INTO reply_attachments (reply_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)");
-                                $stmt->execute([$replyId, $fileName, $filePath, $fileType, $fileSize]);
-                            }
+                foreach ($_FILES['attachments']['tmp_name'] as $key => $tmpName) {
+                    if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
+                        $fileName = $_FILES['attachments']['name'][$key];
+                        $fileSize = $_FILES['attachments']['size'][$key];
+                        $fileType = $_FILES['attachments']['type'][$key];
+                        
+                        if ($fileSize > 5 * 1024 * 1024) continue;
+                        
+                        $ext = pathinfo($fileName, PATHINFO_EXTENSION);
+                        $newName = uniqid() . '_' . time() . '.' . $ext;
+                        $filePath = 'uploads/replies/' . $newName;
+                        
+                        if (move_uploaded_file($tmpName, $uploadDir . $newName)) {
+                            $stmt = $pdo->prepare("INSERT INTO reply_attachments (reply_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)");
+                            $stmt->execute([$replyId, $fileName, $filePath, $fileType, $fileSize]);
                         }
                     }
                 }
-                
-                $notif = new NotificationHelper($pdo);
-                $notif->newReplyToThread($thread['author_id'], $name, $threadId, $thread['title']);
-                
-                $pdo->commit();
-                header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId&success=1#reply-$replyId");
-                exit;
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                $replyError = "Gagal mengirim jawaban.";
-            }
-        }
-    }
-}
-
-// ========== Handle mark best answer WITH RATING (3-5 stars) ==========
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_best_answer']) && $isOwner && !$thread['is_solved']) {
-    $replyId = (int)$_POST['reply_id'];
-    $rating = (int)$_POST['rating'];
-    
-    // Validasi rating 3-5
-    if ($rating < 3 || $rating > 5) {
-        $rating = 3; // Default minimum
-    }
-    
-    $stmt = $pdo->prepare("SELECT fr.user_id, u.role FROM forum_replies fr JOIN users u ON fr.user_id = u.id WHERE fr.id = ? AND fr.thread_id = ?");
-    $stmt->execute([$replyId, $threadId]);
-    $replyData = $stmt->fetch();
-    
-    if ($replyData && $replyData['user_id'] != $userId) {
-        $pdo->beginTransaction();
-        try {
-            // Mark thread as solved
-            $pdo->prepare("UPDATE forum_threads SET is_solved = 1, best_answer_id = ? WHERE id = ?")->execute([$replyId, $threadId]);
-            
-            // Mark reply as best answer
-            $pdo->prepare("UPDATE forum_replies SET is_best_answer = 1 WHERE id = ?")->execute([$replyId]);
-            
-            // Give gems to answerer
-            $pdo->prepare("UPDATE users SET gems = gems + ? WHERE id = ?")->execute([$thread['gem_reward'], $replyData['user_id']]);
-            
-            // Jika penjawab adalah mentor, tambahkan rating ke total_rating dan increment review_count
-            if ($replyData['role'] === 'mentor') {
-                $pdo->prepare("UPDATE users SET total_rating = total_rating + ?, review_count = review_count + 1 WHERE id = ?")->execute([$rating, $replyData['user_id']]);
             }
             
+            // Notify thread owner
             $notif = new NotificationHelper($pdo);
-            $notif->bestAnswer($replyData['user_id'], $thread['gem_reward'], $threadId);
+            $notif->newReplyToThread($thread['author_id'], $name . ' (Mentor)', $threadId, $thread['title']);
             
             $pdo->commit();
-            header("Location: " . $BASE . "/student-forum-thread.php?id=$threadId&best_selected=1");
+            header("Location: " . $BASE . "/mentor-forum-thread.php?id=$threadId&success=1#reply-$replyId");
             exit;
         } catch (Exception $e) {
             $pdo->rollBack();
+            $replyError = "Gagal mengirim jawaban.";
         }
     }
 }
 
 $successMsg = '';
 if (isset($_GET['success'])) $successMsg = 'Jawaban berhasil dikirim!';
-elseif (isset($_GET['best_selected'])) $successMsg = 'Jawaban terbaik berhasil dipilih!';
-elseif (isset($_GET['updated'])) $successMsg = 'Pertanyaan berhasil diperbarui!';
 
 function time_elapsed($datetime) {
     $tz = new DateTimeZone('Asia/Jakarta');
@@ -264,23 +167,19 @@ function time_elapsed($datetime) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($thread['title']); ?> - JagoNugas</title>
+    <title><?php echo htmlspecialchars($thread['title']); ?> - Mentor JagoNugas</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background: #f8fafc; min-height: 100vh; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a202c; background: #f8fafc; min-height: 100vh; }
         .forum-page { background: #f8fafc; }
         
         .btn { padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer; }
         .btn-sm { padding: 8px 14px; font-size: 0.85rem; }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4); }
+        .btn-primary { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4); }
         .btn-outline { border: 2px solid #e2e8f0; color: #475569; background: white; }
-        .btn-outline:hover { border-color: #667eea; color: #667eea; }
-        .btn-danger-outline { border-color: #fecaca; color: #dc2626; }
-        .btn-danger-outline:hover { background: #fef2f2; border-color: #ef4444; }
-        .btn-danger-solid { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
-        .btn-success-solid { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+        .btn-outline:hover { border-color: #10b981; color: #10b981; }
         
         .alert { padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 10px; transition: all 0.3s; }
         .alert-success { background: linear-gradient(135deg, #f0fdf4, #dcfce7); color: #16a34a; border: 1px solid #bbf7d0; }
@@ -290,7 +189,7 @@ function time_elapsed($datetime) {
         
         .thread-breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; font-size: 0.9rem; flex-wrap: wrap; }
         .thread-breadcrumb a { color: #64748b; text-decoration: none; transition: color 0.2s; }
-        .thread-breadcrumb a:hover { color: #667eea; }
+        .thread-breadcrumb a:hover { color: #10b981; }
         .thread-breadcrumb i { color: #cbd5e1; font-size: 0.7rem; }
         .thread-breadcrumb span { color: #94a3b8; }
         
@@ -308,25 +207,23 @@ function time_elapsed($datetime) {
         .thread-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .thread-author-name { font-weight: 600; color: #1e293b; }
         .thread-time { font-size: 0.85rem; color: #94a3b8; }
-        .edited-badge { color: #64748b; font-style: italic; }
         .thread-text { color: #475569; line-height: 1.8; font-size: 1rem; white-space: pre-wrap; }
         
         .thread-attachments { margin-top: 24px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
         .thread-attachments h4 { font-size: 0.9rem; color: #64748b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
         .attachment-list { display: flex; flex-wrap: wrap; gap: 12px; }
         .attachment-item { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #475569; transition: all 0.2s; }
-        .attachment-item:hover { border-color: #667eea; background: #f0f4ff; }
+        .attachment-item:hover { border-color: #10b981; background: #f0fdf4; }
         .attachment-item img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
-        .attachment-item i { font-size: 1.5rem; color: #667eea; }
+        .attachment-item i { font-size: 1.5rem; color: #10b981; }
         
         .thread-question-footer { display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; background: #f8fafc; border-top: 1px solid #f1f5f9; }
         .thread-stats { display: flex; gap: 20px; color: #64748b; font-size: 0.9rem; }
         .thread-stats span { display: flex; align-items: center; gap: 6px; }
-        .thread-actions { display: flex; gap: 10px; }
         
         .thread-replies { margin-bottom: 32px; }
         .thread-replies > h2 { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-        .thread-replies > h2 i { color: #667eea; }
+        .thread-replies > h2 i { color: #10b981; }
         
         .thread-no-replies { background: white; border-radius: 16px; padding: 48px; text-align: center; border: 2px dashed #e2e8f0; }
         .thread-no-replies i { font-size: 3rem; color: #cbd5e1; margin-bottom: 12px; display: block; }
@@ -340,14 +237,12 @@ function time_elapsed($datetime) {
         .reply-body { padding: 24px; }
         .reply-author-inline { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
         .reply-avatar { width: 40px; height: 40px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.9rem; overflow: hidden; flex-shrink: 0; }
+        .reply-avatar.mentor { background: linear-gradient(135deg, #10b981, #059669); }
         .reply-avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .reply-author-name { font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .author-badge { background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #667eea; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
-        
-        /* MENTOR BADGE */
-        .mentor-badge { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
-        .mentor-badge i { font-size: 0.7rem; }
-        
+        .reply-author-name { font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+        .author-badge { padding: 3px 10px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+        .author-badge.mentor { background: linear-gradient(135deg, #ecfdf5, #d1fae5); color: #059669; }
+        .author-badge.penanya { background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #667eea; }
         .reply-time { font-size: 0.85rem; color: #94a3b8; }
         .reply-content { color: #475569; line-height: 1.8; white-space: pre-wrap; }
         
@@ -357,71 +252,35 @@ function time_elapsed($datetime) {
         
         .reply-footer { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #f8fafc; border-top: 1px solid #f1f5f9; }
         .reply-upvote, .reply-upvote-count { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 0.9rem; background: white; border: 1px solid #e2e8f0; color: #64748b; cursor: pointer; transition: all 0.2s; }
-        .reply-upvote:hover { border-color: #667eea; color: #667eea; }
-        .reply-upvote.upvoted { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-color: #667eea; color: #667eea; }
+        .reply-upvote:hover { border-color: #10b981; color: #10b981; }
+        .reply-upvote.upvoted { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #10b981; color: #10b981; }
         .reply-upvote-count { cursor: default; }
         
         .thread-reply-form { background: white; border-radius: 16px; padding: 28px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
         .thread-reply-form h3 { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-        .thread-reply-form h3 i { color: #667eea; }
+        .thread-reply-form h3 i { color: #10b981; }
         .thread-reply-form textarea { width: 100%; padding: 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 0.95rem; resize: vertical; min-height: 140px; outline: none; transition: all 0.2s; font-family: inherit; }
-        .thread-reply-form textarea:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .thread-reply-form textarea:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
         .form-group { margin-bottom: 20px; }
         .form-actions { display: flex; justify-content: flex-end; }
         
         .reply-upload-section { margin-bottom: 20px; }
         .reply-upload-area { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 2px dashed #e2e8f0; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
-        .reply-upload-area:hover { border-color: #667eea; background: #f0f4ff; }
-        .reply-upload-area.dragover { border-color: #667eea; background: #eef2ff; }
+        .reply-upload-area:hover { border-color: #10b981; background: #f0fdf4; }
+        .reply-upload-area.dragover { border-color: #10b981; background: #ecfdf5; }
         .reply-upload-area i { font-size: 1.2rem; color: #64748b; }
         .reply-upload-area span { color: #64748b; font-weight: 500; }
         .reply-upload-area small { color: #94a3b8; font-size: 0.8rem; }
         .reply-upload-area input { display: none; }
         .reply-file-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
         .file-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f1f5f9; border-radius: 8px; font-size: 0.85rem; color: #475569; }
-        .file-item i { color: #667eea; }
+        .file-item i { color: #10b981; }
         
-        .thread-login-prompt { background: white; border-radius: 16px; padding: 32px; text-align: center; border: 2px dashed #e2e8f0; }
-        .thread-login-prompt i { font-size: 2rem; color: #cbd5e1; margin-bottom: 12px; display: block; }
-        .thread-login-prompt a { color: #667eea; font-weight: 600; }
-        
-        /* Owner info box */
-        .thread-owner-info { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-radius: 16px; padding: 24px; text-align: center; border: 1px solid #bfdbfe; }
-        .thread-owner-info i { font-size: 2rem; color: #3b82f6; margin-bottom: 12px; display: block; }
-        .thread-owner-info p { color: #1e40af; font-weight: 500; }
-        
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; opacity: 0; visibility: hidden; transition: all 0.3s; padding: 20px; }
-        .modal-overlay.active { opacity: 1; visibility: visible; }
-        .modal-container { background: white; border-radius: 20px; padding: 32px; max-width: 420px; width: 100%; text-align: center; transform: scale(0.9); transition: all 0.3s; }
-        .modal-overlay.active .modal-container { transform: scale(1); }
-        .modal-icon { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 2rem; }
-        .modal-icon.danger { background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #ef4444; }
-        .modal-icon.success { background: linear-gradient(135deg, #f0fdf4, #dcfce7); color: #10b981; }
-        .modal-container h3 { font-size: 1.25rem; color: #1e293b; margin-bottom: 8px; }
-        .modal-container p { color: #64748b; margin-bottom: 20px; }
-        .modal-info { text-align: left; background: #f8fafc; border-radius: 12px; padding: 16px; margin-bottom: 24px; list-style: none; }
-        .modal-info li { display: flex; align-items: center; gap: 10px; padding: 8px 0; color: #475569; font-size: 0.9rem; border-bottom: 1px solid #e2e8f0; }
-        .modal-info li:last-child { border-bottom: none; }
-        .modal-info li i { color: #64748b; width: 20px; }
-        .modal-actions { display: flex; gap: 12px; justify-content: center; }
-        .modal-actions .btn { flex: 1; justify-content: center; }
-        
-        /* ===== RATING STARS ===== */
-        .rating-section { margin: 20px 0; }
-        .rating-label { font-size: 0.9rem; color: #64748b; margin-bottom: 10px; display: block; }
-        .star-rating { display: flex; gap: 8px; justify-content: center; }
-        .star-rating input { display: none; }
-        .star-rating label { font-size: 2rem; color: #e2e8f0; cursor: pointer; transition: all 0.2s; }
-        .star-rating label:hover,
-        .star-rating label:hover ~ label,
-        .star-rating input:checked ~ label { color: #fbbf24; }
-        .star-rating:not(:hover) input:checked ~ label { color: #fbbf24; }
-        /* Reverse order for CSS sibling selector trick */
-        .star-rating { flex-direction: row-reverse; justify-content: center; }
-        .star-rating label:hover ~ label { color: #fbbf24; }
-        
-        .mentor-answer-note { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border: 1px solid #a7f3d0; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; color: #059669; font-size: 0.9rem; }
-        .mentor-answer-note i { font-size: 1.1rem; }
+        /* Gem reward info for mentor */
+        .gem-info-box { background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+        .gem-info-box i { font-size: 1.5rem; color: #d97706; }
+        .gem-info-box p { color: #92400e; font-size: 0.9rem; margin: 0; }
+        .gem-info-box strong { color: #78350f; }
         
         @media (max-width: 768px) {
             .thread-container { padding: 20px 16px; }
@@ -430,30 +289,24 @@ function time_elapsed($datetime) {
             .thread-title { font-size: 1.25rem; }
             .reply-body { padding: 20px; }
             .reply-footer { flex-direction: column; gap: 12px; align-items: stretch; }
-            .reply-footer .btn { width: 100%; justify-content: center; }
             .thread-reply-form { padding: 20px; }
-            .modal-actions { flex-direction: column; }
         }
     </style>
 </head>
 <body class="forum-page">
-    <?php include __DIR__ . '/student-navbar.php'; ?>
+    <?php include __DIR__ . '/mentor-navbar.php'; ?>
 
     <div class="thread-container">
         <nav class="thread-breadcrumb">
-            <a href="<?php echo $BASE; ?>/student-forum.php">Forum</a>
+            <a href="<?php echo $BASE; ?>/mentor-forum.php">Forum</a>
             <i class="bi bi-chevron-right"></i>
-            <a href="<?php echo $BASE; ?>/student-forum.php?category=<?php echo $thread['category_slug']; ?>"><?php echo htmlspecialchars($thread['category_name']); ?></a>
+            <a href="<?php echo $BASE; ?>/mentor-forum.php?category=<?php echo $thread['category_slug']; ?>"><?php echo htmlspecialchars($thread['category_name']); ?></a>
             <i class="bi bi-chevron-right"></i>
             <span>Pertanyaan</span>
         </nav>
 
         <?php if ($successMsg): ?>
         <div class="alert alert-success"><i class="bi bi-check-circle"></i> <?php echo $successMsg; ?></div>
-        <?php endif; ?>
-
-        <?php if (isset($deleteError)): ?>
-        <div class="alert alert-error"><i class="bi bi-exclamation-circle"></i> <?php echo $deleteError; ?></div>
         <?php endif; ?>
 
         <article class="thread-question">
@@ -481,12 +334,7 @@ function time_elapsed($datetime) {
                     </div>
                     <div>
                         <span class="thread-author-name"><?php echo htmlspecialchars($thread['author_name']); ?></span>
-                        <div class="thread-time">
-                            <?php echo time_elapsed($thread['created_at']); ?>
-                            <?php if ($thread['updated_at'] && $thread['updated_at'] != $thread['created_at']): ?>
-                            <span class="edited-badge">(diedit)</span>
-                            <?php endif; ?>
-                        </div>
+                        <div class="thread-time"><?php echo time_elapsed($thread['created_at']); ?></div>
                     </div>
                 </div>
                 
@@ -516,14 +364,9 @@ function time_elapsed($datetime) {
                     <span><i class="bi bi-eye"></i> <?php echo $thread['views']; ?> views</span>
                     <span><i class="bi bi-chat-dots"></i> <?php echo count($replies); ?> jawaban</span>
                 </div>
-                
-                <?php if ($isOwner): ?>
-                <div class="thread-actions">
-                    <a href="<?php echo $BASE; ?>/student-forum-edit.php?id=<?php echo $threadId; ?>" class="btn btn-sm btn-outline"><i class="bi bi-pencil"></i> Edit</a>
-                    <button type="button" class="btn btn-sm btn-danger-outline" onclick="openDeleteModal()"><i class="bi bi-trash"></i> Hapus</button>
-                </div>
-                <form id="deleteForm" method="POST" style="display:none;"><input type="hidden" name="delete_thread" value="1"></form>
-                <?php endif; ?>
+                <a href="<?php echo $BASE; ?>/mentor-forum.php" class="btn btn-sm btn-outline">
+                    <i class="bi bi-arrow-left"></i> Kembali
+                </a>
             </div>
         </article>
 
@@ -534,11 +377,7 @@ function time_elapsed($datetime) {
             <div class="thread-no-replies">
                 <i class="bi bi-chat-square-text"></i>
                 <h3>Belum Ada Jawaban</h3>
-                <?php if ($isOwner): ?>
-                <p>Tunggu jawaban dari pengguna lain</p>
-                <?php else: ?>
                 <p>Jadilah yang pertama membantu menjawab pertanyaan ini!</p>
-                <?php endif; ?>
             </div>
             <?php else: ?>
                 <?php foreach ($replies as $reply): ?>
@@ -549,7 +388,7 @@ function time_elapsed($datetime) {
                     
                     <div class="reply-body">
                         <div class="reply-author-inline">
-                            <div class="reply-avatar" <?php if ($reply['author_role'] === 'mentor'): ?>style="background: linear-gradient(135deg, #10b981, #059669);"<?php endif; ?>>
+                            <div class="reply-avatar <?php echo $reply['author_role'] === 'mentor' ? 'mentor' : ''; ?>">
                                 <?php $replyAvatarUrl = get_avatar_url($reply['author_avatar'], $BASE); ?>
                                 <?php if ($replyAvatarUrl): ?>
                                     <img src="<?php echo htmlspecialchars($replyAvatarUrl); ?>" alt="" referrerpolicy="no-referrer">
@@ -560,13 +399,11 @@ function time_elapsed($datetime) {
                             <div>
                                 <span class="reply-author-name">
                                     <?php echo htmlspecialchars($reply['author_name']); ?>
-                                    
                                     <?php if ($reply['author_role'] === 'mentor'): ?>
-                                    <span class="mentor-badge"><i class="bi bi-patch-check-fill"></i> Mentor</span>
+                                    <span class="author-badge mentor">Mentor</span>
                                     <?php endif; ?>
-                                    
                                     <?php if ($reply['author_id'] == $thread['author_id']): ?>
-                                    <span class="author-badge">Penanya</span>
+                                    <span class="author-badge penanya">Penanya</span>
                                     <?php endif; ?>
                                 </span>
                                 <div class="reply-time"><?php echo time_elapsed($reply['created_at']); ?></div>
@@ -595,7 +432,7 @@ function time_elapsed($datetime) {
                     
                     <div class="reply-footer">
                         <div>
-                            <?php if ($userId && $userId != $reply['author_id']): ?>
+                            <?php if ($userId != $reply['author_id']): ?>
                             <button class="reply-upvote <?php echo $reply['user_upvoted'] ? 'upvoted' : ''; ?>" data-reply-id="<?php echo $reply['id']; ?>">
                                 <i class="bi bi-hand-thumbs-up<?php echo $reply['user_upvoted'] ? '-fill' : ''; ?>"></i>
                                 <span><?php echo $reply['upvote_count']; ?></span>
@@ -604,22 +441,22 @@ function time_elapsed($datetime) {
                             <span class="reply-upvote-count"><i class="bi bi-hand-thumbs-up"></i> <span><?php echo $reply['upvote_count']; ?></span></span>
                             <?php endif; ?>
                         </div>
-                        
-                        <?php if ($isOwner && !$thread['is_solved'] && $reply['author_id'] != $userId): ?>
-                        <button type="button" class="btn btn-sm btn-success-solid" onclick="openBestAnswerModal(<?php echo $reply['id']; ?>, '<?php echo $reply['author_role']; ?>')">
-                            <i class="bi bi-check-lg"></i> Pilih Jawaban Terbaik
-                        </button>
-                        <?php endif; ?>
                     </div>
                 </article>
                 <?php endforeach; ?>
             <?php endif; ?>
         </section>
 
-        <!-- FORM JAWABAN: Hanya muncul untuk NON-OWNER yang login -->
-        <?php if ($userId && !$isOwner): ?>
+        <!-- Form Jawaban untuk Mentor -->
+        <?php if (!$thread['is_solved']): ?>
         <section class="thread-reply-form" id="reply-form">
-            <h3><i class="bi bi-reply"></i> Tulis Jawabanmu</h3>
+            <h3><i class="bi bi-reply"></i> Bantu Jawab Pertanyaan Ini</h3>
+            
+            <!-- Info Gem -->
+            <div class="gem-info-box">
+                <i class="bi bi-gem"></i>
+                <p>Jika jawabanmu dipilih sebagai jawaban terbaik, kamu akan mendapatkan <strong>+<?php echo $thread['gem_reward']; ?> gem</strong>!</p>
+            </div>
             
             <?php if ($replyError): ?>
             <div class="alert alert-error"><i class="bi bi-exclamation-circle"></i> <?php echo $replyError; ?></div>
@@ -645,121 +482,16 @@ function time_elapsed($datetime) {
                 </div>
             </form>
         </section>
-        <?php elseif ($userId && $isOwner): ?>
-        <!-- Info untuk owner -->
-        <div class="thread-owner-info">
-            <i class="bi bi-info-circle"></i>
-            <p>Ini adalah pertanyaanmu. Tunggu jawaban dari pengguna lain.</p>
-        </div>
         <?php else: ?>
-        <!-- Belum login -->
-        <div class="thread-login-prompt">
-            <i class="bi bi-lock"></i>
-            <p>Silakan <a href="<?php echo $BASE; ?>/login.php?redirect=student-forum-thread.php?id=<?php echo $threadId; ?>">login</a> untuk menjawab.</p>
+        <!-- Thread sudah solved -->
+        <div class="gem-info-box" style="background: linear-gradient(135deg, #dcfce7, #bbf7d0);">
+            <i class="bi bi-check-circle-fill" style="color: #059669;"></i>
+            <p style="color: #065f46;">Pertanyaan ini sudah terjawab. Terima kasih sudah membantu!</p>
         </div>
         <?php endif; ?>
     </div>
 
-    <?php if ($isOwner): ?>
-    <div class="modal-overlay" id="deleteModal">
-        <div class="modal-container">
-            <div class="modal-icon danger"><i class="bi bi-trash"></i></div>
-            <h3>Hapus Pertanyaan?</h3>
-            <p>Yakin ingin menghapus pertanyaan ini?</p>
-            <ul class="modal-info">
-                <li><i class="bi bi-chat-dots"></i> Semua jawaban akan ikut terhapus</li>
-                <?php if (!$thread['is_solved']): ?>
-                <li><i class="bi bi-gem"></i> <strong><?php echo $thread['gem_reward']; ?> gem</strong> akan dikembalikan</li>
-                <?php endif; ?>
-            </ul>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-outline" onclick="closeDeleteModal()">Batal</button>
-                <button type="button" class="btn btn-danger-solid" onclick="submitDelete()"><i class="bi bi-trash"></i> Ya, Hapus</button>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if ($isOwner && !$thread['is_solved']): ?>
-    <!-- MODAL BEST ANSWER WITH RATING -->
-    <div class="modal-overlay" id="bestAnswerModal">
-        <div class="modal-container">
-            <div class="modal-icon success"><i class="bi bi-trophy"></i></div>
-            <h3>Pilih Jawaban Terbaik?</h3>
-            <p>Kamu yakin ingin memilih jawaban ini sebagai yang terbaik?</p>
-            
-            <!-- Note untuk jawaban mentor -->
-            <div class="mentor-answer-note" id="mentorNote" style="display: none;">
-                <i class="bi bi-patch-check-fill"></i>
-                <span>Jawaban dari Mentor! Berikan rating sebagai apresiasi.</span>
-            </div>
-            
-            <form method="POST" id="bestAnswerForm">
-                <input type="hidden" name="mark_best_answer" value="1">
-                <input type="hidden" name="reply_id" id="bestAnswerReplyId" value="">
-                
-                <!-- Rating Section (hanya untuk mentor) -->
-                <div class="rating-section" id="ratingSection" style="display: none;">
-                    <span class="rating-label">Berikan rating untuk mentor ini (3-5 bintang):</span>
-                    <div class="star-rating">
-                        <input type="radio" name="rating" value="5" id="star5">
-                        <label for="star5"><i class="bi bi-star-fill"></i></label>
-                        <input type="radio" name="rating" value="4" id="star4">
-                        <label for="star4"><i class="bi bi-star-fill"></i></label>
-                        <input type="radio" name="rating" value="3" id="star3" checked>
-                        <label for="star3"><i class="bi bi-star-fill"></i></label>
-                    </div>
-                </div>
-                
-                <ul class="modal-info">
-                    <li><i class="bi bi-gem"></i> <strong><?php echo $thread['gem_reward']; ?> gem</strong> akan diberikan ke penjawab</li>
-                    <li><i class="bi bi-lock"></i> Pilihan ini tidak bisa diubah</li>
-                </ul>
-                
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-outline" onclick="closeBestAnswerModal()">Batal</button>
-                    <button type="submit" class="btn btn-success-solid"><i class="bi bi-trophy"></i> Ya, Pilih Ini</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <?php endif; ?>
-
     <script>
-    const deleteModal = document.getElementById('deleteModal');
-    const bestAnswerModal = document.getElementById('bestAnswerModal');
-
-    function openDeleteModal() { deleteModal?.classList.add('active'); document.body.style.overflow = 'hidden'; }
-    function closeDeleteModal() { deleteModal?.classList.remove('active'); document.body.style.overflow = ''; }
-    function submitDelete() { document.getElementById('deleteForm').submit(); }
-
-    function openBestAnswerModal(replyId, authorRole) {
-        document.getElementById('bestAnswerReplyId').value = replyId;
-        
-        // Show/hide rating section based on author role
-        const ratingSection = document.getElementById('ratingSection');
-        const mentorNote = document.getElementById('mentorNote');
-        
-        if (authorRole === 'mentor') {
-            ratingSection.style.display = 'block';
-            mentorNote.style.display = 'flex';
-        } else {
-            ratingSection.style.display = 'none';
-            mentorNote.style.display = 'none';
-        }
-        
-        bestAnswerModal?.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-    
-    function closeBestAnswerModal() { 
-        bestAnswerModal?.classList.remove('active'); 
-        document.body.style.overflow = ''; 
-    }
-
-    document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) { m.classList.remove('active'); document.body.style.overflow = ''; }}));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.active').forEach(m => { m.classList.remove('active'); document.body.style.overflow = ''; }); });
-
     document.querySelectorAll('.reply-upvote').forEach(btn => {
         btn.addEventListener('click', async function() {
             const res = await fetch('<?php echo $BASE; ?>/api-forum-upvote.php', {

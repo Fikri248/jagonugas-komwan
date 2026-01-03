@@ -1,13 +1,5 @@
 <?php
-// mentor-chat-send.php - API kirim pesan + file + edit message (sync dengan student-chat-send.php)
-
-// Set PHP limits for large file upload
-@ini_set('upload_max_filesize', '300M');
-@ini_set('post_max_size', '310M');
-@ini_set('max_execution_time', '600');
-@ini_set('max_input_time', '600');
-@ini_set('memory_limit', '512M');
-
+// student-chat-send.php - API kirim pesan + file + edit message
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
@@ -17,12 +9,12 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'mentor') {
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
-$mentor_id = $_SESSION['user_id'];
+$student_id = $_SESSION['user_id'];
 
 try {
     $pdo = (new Database())->getConnection();
@@ -34,16 +26,16 @@ try {
 // Validate input
 $conversation_id = (int)($_POST['conversation_id'] ?? 0);
 $message = trim($_POST['message'] ?? '');
-$edit_message_id = (int)($_POST['edit_message_id'] ?? 0);
+$edit_message_id = (int)($_POST['edit_message_id'] ?? 0); // <-- Tambahan untuk edit
 
 if (!$conversation_id) {
     echo json_encode(['success' => false, 'error' => 'Invalid conversation']);
     exit;
 }
 
-// Verify conversation belongs to mentor
-$stmt = $pdo->prepare("SELECT * FROM conversations WHERE id = ? AND mentor_id = ?");
-$stmt->execute([$conversation_id, $mentor_id]);
+// Verify conversation belongs to student
+$stmt = $pdo->prepare("SELECT * FROM conversations WHERE id = ? AND student_id = ?");
+$stmt->execute([$conversation_id, $student_id]);
 $conv = $stmt->fetch();
 
 if (!$conv) {
@@ -60,7 +52,7 @@ if ($edit_message_id > 0) {
         SELECT * FROM messages 
         WHERE id = ? AND conversation_id = ? AND sender_id = ?
     ");
-    $stmt->execute([$edit_message_id, $conversation_id, $mentor_id]);
+    $stmt->execute([$edit_message_id, $conversation_id, $student_id]);
     $existingMsg = $stmt->fetch();
     
     if (!$existingMsg) {
@@ -80,7 +72,7 @@ if ($edit_message_id > 0) {
             SET message = ?, edited_at = NOW() 
             WHERE id = ? AND sender_id = ?
         ");
-        $stmt->execute([$message, $edit_message_id, $mentor_id]);
+        $stmt->execute([$message, $edit_message_id, $student_id]);
         
         // Update conversation timestamp
         $stmt = $pdo->prepare("UPDATE conversations SET updated_at = NOW() WHERE id = ?");
@@ -92,9 +84,9 @@ if ($edit_message_id > 0) {
             'message' => [
                 'id' => $edit_message_id,
                 'message' => $message,
-                'file_name' => $existingMsg['file_name'] ?? null,
-                'file_path' => $existingMsg['file_path'] ?? null,
-                'file_size' => $existingMsg['file_size'] ?? null,
+                'file_name' => $existingMsg['file_name'],
+                'file_path' => $existingMsg['file_path'],
+                'file_size' => $existingMsg['file_size'],
                 'time' => date('H:i', strtotime($existingMsg['created_at'])),
                 'edited_at' => date('Y-m-d H:i:s')
             ]
@@ -125,12 +117,10 @@ if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ER
     
     // Allowed types
     $allowedTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'image/jpeg', 'image/png', 'image/gif',
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'text/plain',
         'video/mp4', 'video/webm', 'video/quicktime'
     ];
@@ -185,7 +175,7 @@ try {
     ");
     $stmt->execute([
         $conversation_id,
-        $mentor_id,
+        $student_id,
         $message ?: null,
         $file_name,
         $file_path,
@@ -214,9 +204,5 @@ try {
     ]);
     
 } catch (Exception $e) {
-    // Cleanup file if DB failed
-    if ($file_path && file_exists(__DIR__ . '/' . $file_path)) {
-        @unlink(__DIR__ . '/' . $file_path);
-    }
     echo json_encode(['success' => false, 'error' => 'Gagal menyimpan pesan']);
 }
