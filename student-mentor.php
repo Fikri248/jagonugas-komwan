@@ -1,24 +1,30 @@
 <?php
-// student-mentor.php v3.3 - Fix Google Avatar URL
+// student-mentor.php v3.4 - Add Mentor Bio Display
+
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
+
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ' . BASE_PATH . '/login.php');
     exit;
 }
 
+
 if (!$pdo) {
     die('Database connection failed. Please contact administrator.');
 }
 
+
 $student_id = $_SESSION['user_id'];
+
 
 $stmt = $pdo->prepare("SELECT gems FROM users WHERE id = ?");
 $stmt->execute([$student_id]);
 $student = $stmt->fetch(PDO::FETCH_ASSOC);
 $gem_balance = $student['gems'] ?? 0;
+
 
 // Helper: Get Avatar URL (same as student-settings.php)
 function get_avatar_url($avatar, $base = '') {
@@ -27,11 +33,14 @@ function get_avatar_url($avatar, $base = '') {
     return $base . '/' . ltrim($avatar, '/');
 }
 
+
 $search = $_GET['search'] ?? '';
 $specialization = $_GET['specialization'] ?? '';
 $min_rating = $_GET['min_rating'] ?? '0';
 
-$query = "SELECT id, name, email, program_studi, specialization, hourly_rate, avatar, semester,
+
+// v3.4: Added bio column to SELECT
+$query = "SELECT id, name, email, program_studi, specialization, hourly_rate, avatar, semester, bio,
           CASE 
               WHEN review_count > 0 THEN ROUND(total_rating / review_count, 1)
               ELSE 0 
@@ -40,7 +49,9 @@ $query = "SELECT id, name, email, program_studi, specialization, hourly_rate, av
           FROM users 
           WHERE role = 'mentor' AND is_verified = 1";
 
+
 $params = [];
+
 
 if ($search) {
     $query .= " AND (name LIKE ? OR specialization LIKE ?)";
@@ -48,21 +59,26 @@ if ($search) {
     $params[] = "%$search%";
 }
 
+
 if ($specialization) {
     $query .= " AND specialization LIKE ?";
     $params[] = "%$specialization%";
 }
 
+
 $query .= " HAVING avg_rating >= ?";
 $params[] = (float)$min_rating;
 $query .= " ORDER BY avg_rating DESC, review_count DESC";
+
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $mentors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+
 $spec_stmt = $pdo->query("SELECT DISTINCT specialization FROM users WHERE role = 'mentor' AND is_verified = 1 AND specialization IS NOT NULL");
 $specializations = $spec_stmt ? $spec_stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+
 
 // FIX: Use string keys to avoid PHP 8.1+ deprecated warning
 $ratingOptions = [
@@ -88,6 +104,7 @@ $ratingOptions = [
             background: #f8fafc;
             min-height: 100vh;
         }
+
 
         /* ===== BUTTONS ===== */
         .btn {
@@ -128,12 +145,14 @@ $ratingOptions = [
             font-size: 0.8rem;
         }
 
+
         /* ===== PAGE WRAPPER ===== */
         .page-wrapper {
             max-width: 1400px;
             margin: 0 auto;
             padding: 32px 24px 60px;
         }
+
 
         /* ===== PAGE HEADER ===== */
         .page-header {
@@ -149,6 +168,7 @@ $ratingOptions = [
             color: #64748b;
             font-size: 0.95rem;
         }
+
 
         /* ===== FILTER SECTION ===== */
         .filter-card {
@@ -199,6 +219,7 @@ $ratingOptions = [
         .filter-item input::placeholder {
             color: #94a3b8;
         }
+
 
         /* ===== CUSTOM SELECT ===== */
         .custom-select {
@@ -293,12 +314,14 @@ $ratingOptions = [
             font-size: 1rem;
         }
 
+
         /* ===== MENTOR GRID ===== */
         .mentor-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 24px;
         }
+
 
         /* ===== MENTOR CARD ===== */
         .mentor-card {
@@ -318,6 +341,7 @@ $ratingOptions = [
             box-shadow: 0 12px 40px rgba(102, 126, 234, 0.15);
             border-color: rgba(102, 126, 234, 0.2);
         }
+
 
         /* Avatar */
         .mentor-avatar {
@@ -341,6 +365,7 @@ $ratingOptions = [
             object-fit: cover;
         }
 
+
         /* Name */
         .mentor-card h3 {
             font-size: 1.2rem;
@@ -348,6 +373,7 @@ $ratingOptions = [
             color: #1e293b;
             margin-bottom: 8px;
         }
+
 
         /* Rating Badge */
         .mentor-rating {
@@ -369,6 +395,53 @@ $ratingOptions = [
             color: #b45309;
             font-weight: 500;
         }
+
+
+        /* v3.4: Mentor Bio */
+        .mentor-bio {
+            width: 100%;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+        .mentor-bio-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+        .mentor-bio-header i {
+            color: #667eea;
+            font-size: 0.9rem;
+        }
+        .mentor-bio-header span {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .mentor-bio-text {
+            font-size: 0.85rem;
+            color: #475569;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .mentor-bio.empty {
+            background: #f8fafc;
+            border: 1px dashed #e2e8f0;
+        }
+        .mentor-bio.empty .mentor-bio-text {
+            color: #94a3b8;
+            font-style: italic;
+            text-align: center;
+        }
+
 
         /* Tags */
         .mentor-tags {
@@ -405,6 +478,7 @@ $ratingOptions = [
         }
         .tag-specialization i { color: #22c55e; }
 
+
         /* Price */
         .mentor-price {
             display: flex;
@@ -426,6 +500,7 @@ $ratingOptions = [
             font-weight: 700;
             color: #1e293b;
         }
+
 
         /* ===== EMPTY STATE ===== */
         .empty-state {
@@ -481,6 +556,7 @@ $ratingOptions = [
             font-size: 1rem;
         }
 
+
         /* ===== STATS BAR ===== */
         .stats-bar {
             display: flex;
@@ -496,6 +572,7 @@ $ratingOptions = [
         .stats-bar .result-count strong {
             color: #1e293b;
         }
+
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 1024px) {
@@ -522,11 +599,13 @@ $ratingOptions = [
 <body>
     <?php include 'student-navbar.php'; ?>
 
+
     <main class="page-wrapper">
         <div class="page-header">
             <h1>Cari Mentor</h1>
             <p>Temukan mentor terbaik untuk membantu tugas dan proyekmu</p>
         </div>
+
 
         <!-- Filter Section -->
         <div class="filter-card">
@@ -536,6 +615,7 @@ $ratingOptions = [
                         <label for="search"><i class="bi bi-search"></i> Cari Mentor</label>
                         <input type="text" id="search" name="search" placeholder="Nama atau spesialisasi..." value="<?php echo htmlspecialchars($search); ?>">
                     </div>
+
 
                     <div class="filter-item">
                         <label><i class="bi bi-lightbulb-fill"></i> Spesialisasi</label>
@@ -560,6 +640,7 @@ $ratingOptions = [
                         </div>
                     </div>
 
+
                     <div class="filter-item">
                         <label><i class="bi bi-star-fill"></i> Rating</label>
                         <div class="custom-select" data-name="min_rating">
@@ -580,6 +661,7 @@ $ratingOptions = [
                         </div>
                     </div>
 
+
                     <div class="filter-item">
                         <label>&nbsp;</label>
                         <button type="submit" class="btn btn-primary">
@@ -589,6 +671,7 @@ $ratingOptions = [
                 </div>
             </form>
         </div>
+
 
         <!-- Stats Bar -->
         <?php if (!empty($mentors)): ?>
@@ -601,6 +684,7 @@ $ratingOptions = [
             <?php endif; ?>
         </div>
         <?php endif; ?>
+
 
         <!-- Mentor Grid -->
         <div class="mentor-grid">
@@ -620,6 +704,8 @@ $ratingOptions = [
                     <?php 
                     // FIX v3.3: Use helper function for Google avatar support
                     $mentorAvatarUrl = get_avatar_url($mentor['avatar'] ?? '', BASE_PATH);
+                    // v3.4: Get mentor bio
+                    $mentorBio = trim($mentor['bio'] ?? '');
                     ?>
                     <div class="mentor-card">
                         <div class="mentor-avatar">
@@ -630,13 +716,28 @@ $ratingOptions = [
                             <?php endif; ?>
                         </div>
 
+
                         <h3><?php echo htmlspecialchars($mentor['name']); ?></h3>
+
 
                         <div class="mentor-rating">
                             <i class="bi bi-star-fill"></i>
                             <?php echo number_format((float)$mentor['avg_rating'], 1); ?>
                             <span class="review-count">(<?php echo (int)$mentor['review_count']; ?> review)</span>
                         </div>
+
+
+                        <!-- v3.4: Bio Section -->
+                        <div class="mentor-bio <?php echo empty($mentorBio) ? 'empty' : ''; ?>">
+                            <div class="mentor-bio-header">
+                                <i class="bi bi-quote"></i>
+                                <span>Tentang Mentor</span>
+                            </div>
+                            <p class="mentor-bio-text">
+                                <?php echo !empty($mentorBio) ? htmlspecialchars($mentorBio) : 'Belum ada bio'; ?>
+                            </p>
+                        </div>
+
 
                         <div class="mentor-tags">
                             <?php if (!empty($mentor['semester'])): ?>
@@ -657,10 +758,12 @@ $ratingOptions = [
                             <?php endif; ?>
                         </div>
 
+
                         <div class="mentor-price">
                             <i class="bi bi-gem"></i>
                             <span><?php echo number_format((int)$mentor['hourly_rate'], 0, ',', '.'); ?> Gem/sesi</span>
                         </div>
+
 
                         <a href="<?php echo BASE_PATH; ?>/book-session.php?mentor_id=<?php echo $mentor['id']; ?>" class="btn btn-primary btn-full">
                             <i class="bi bi-calendar-check"></i> Book Session
@@ -671,6 +774,7 @@ $ratingOptions = [
         </div>
     </main>
 
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const customSelects = document.querySelectorAll('.custom-select');
@@ -680,6 +784,7 @@ $ratingOptions = [
             const hiddenInput = select.querySelector('input[type="hidden"]');
             const selectText = select.querySelector('.select-text');
 
+
             selected.addEventListener('click', function(e) {
                 e.stopPropagation();
                 customSelects.forEach(s => { 
@@ -687,6 +792,7 @@ $ratingOptions = [
                 });
                 select.classList.toggle('active');
             });
+
 
             select.querySelectorAll('.select-item').forEach(item => {
                 item.addEventListener('click', function() {
@@ -709,6 +815,7 @@ $ratingOptions = [
                 });
             });
         });
+
 
         document.addEventListener('click', () => {
             customSelects.forEach(s => s.classList.remove('active'));
