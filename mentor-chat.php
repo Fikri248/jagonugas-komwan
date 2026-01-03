@@ -1,4 +1,7 @@
 <?php
+// mentor-chat.php v3.2 - Fixed avatar Google (sync with mentor-navbar.php)
+// Chat mentor dengan edit/delete/copy, video 300MB, edited indicator, typing indicator
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
@@ -12,8 +15,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'mentor') {
 }
 
 $mentor_id = $_SESSION['user_id'];
-$name      = $_SESSION['name'] ?? 'Mentor';
-$email     = $_SESSION['email'] ?? '';
 
 try {
     $pdo = (new Database())->getConnection();
@@ -21,51 +22,75 @@ try {
     die('Database connection failed.');
 }
 
-// avatar initial
-$initial = 'M';
-if (is_string($name) && $name !== '') {
-    $initial = function_exists('mb_substr')
-        ? mb_strtoupper(mb_substr($name, 0, 1, 'UTF-8'), 'UTF-8')
-        : strtoupper(substr($name, 0, 1));
-}
-
-// conversation yang dipilih
 $currentConvId = isset($_GET['conversation_id']) ? (int)$_GET['conversation_id'] : 0;
 
-/* ===== Sidebar: list conversations mentor ===== */
+// ===== v3.1: Query tetap load semua, filter di PHP =====
 $stmt = $pdo->prepare("
-    SELECT c.id,
-           u.name AS student_name,
-           u.program_studi AS student_prodi
+    SELECT 
+        c.id AS conversation_id,
+        c.student_id,
+        c.mentor_id,
+        c.session_id,
+        u.name AS student_name,
+        u.program_studi AS student_prodi,
+        u.avatar AS student_avatar,
+        s.id AS session_id,
+        s.status AS session_status,
+        s.ended_at AS session_ended_at,
+        s.created_at AS session_created,
+        (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND sender_id != ? AND is_read = 0) AS unread_count,
+        (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS message_count
     FROM conversations c
-    JOIN users u ON c.student_id = u.id
+    INNER JOIN users u ON c.student_id = u.id
+    LEFT JOIN sessions s ON c.session_id = s.id
     WHERE c.mentor_id = ?
-    ORDER BY c.updated_at DESC
+    ORDER BY 
+        CASE 
+            WHEN s.ended_at IS NOT NULL THEN 2
+            WHEN s.status = 'ongoing' THEN 0
+            WHEN s.status = 'pending' THEN 1
+            ELSE 3
+        END,
+        c.updated_at DESC
 ");
-$stmt->execute([$mentor_id]);
+$stmt->execute([$mentor_id, $mentor_id]);
 $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if (!$currentConvId && !empty($conversations)) {
-    $currentConvId = (int)$conversations[0]['id'];
+// ===== v3.1: Filter untuk sidebar - exclude cancelled & empty =====
+$filteredConversations = array_filter($conversations, function($conv) {
+    $isCancelled = ($conv['session_status'] === 'cancelled');
+    $isEmpty = ((int)$conv['message_count'] === 0);
+    $isActiveSession = in_array($conv['session_status'], ['ongoing', 'pending'], true);
+    return !$isCancelled && (!$isEmpty || $isActiveSession);
+});
+
+$validConvIds = array_column($conversations, 'conversation_id');
+if ($currentConvId && !in_array($currentConvId, $validConvIds)) {
+    header('Location: ' . BASE_PATH . '/mentor-chat.php');
+    exit;
 }
 
-/* ===== Data conversation aktif & messages ===== */
+if (!$currentConvId && !empty($filteredConversations)) {
+    $firstFiltered = reset($filteredConversations);
+    $currentConvId = (int)$firstFiltered['conversation_id'];
+}
+
 $currentConv = null;
 $currentMsgs = [];
+$currentSession = null;
+$canSendMessage = false;
 
 if ($currentConvId) {
-    $stmt = $pdo->prepare("
-        SELECT c.*, u.name AS student_name
-        FROM conversations c
-        JOIN users u ON c.student_id = u.id
-        WHERE c.id = ? AND c.mentor_id = ?
-    ");
-    $stmt->execute([$currentConvId, $mentor_id]);
-    $currentConv = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    foreach ($conversations as $conv) {
+        if ((int)$conv['conversation_id'] === $currentConvId) {
+            $currentConv = $conv;
+            break;
+        }
+    }
+    
     if ($currentConv) {
         $stmt = $pdo->prepare("
-            SELECT m.*, u.name AS sender_name
+            SELECT m.*, u.name AS sender_name, u.role AS sender_role, u.avatar AS sender_avatar
             FROM messages m
             JOIN users u ON m.sender_id = u.id
             WHERE m.conversation_id = ?
@@ -74,25 +99,38 @@ if ($currentConvId) {
         $stmt->execute([$currentConvId]);
         $currentMsgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // tandai pesan dari student sebagai read
-        $stmt = $pdo->prepare("
-            UPDATE messages 
-            SET is_read = 1 
-            WHERE conversation_id = ? 
-              AND sender_id != ?
-        ");
+        $stmt = $pdo->prepare("UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_id != ?");
         $stmt->execute([$currentConvId, $mentor_id]);
-    } else {
-        $currentConvId = 0;
+
+        $actualStatus = 'none';
+        if ($currentConv['session_ended_at']) {
+            $actualStatus = 'completed';
+        } elseif ($currentConv['session_status']) {
+            $actualStatus = $currentConv['session_status'];
+        }
+
+        $currentSession = [
+            'id' => $currentConv['session_id'],
+            'status' => $actualStatus,
+            'ended_at' => $currentConv['session_ended_at']
+        ];
+
+        $canSendMessage = ($actualStatus === 'ongoing' && empty($currentConv['session_ended_at']));
     }
 }
 
-function url_path(string $path = ''): string
-{
-    $base = defined('BASE_PATH') ? BASE_PATH : '';
-    $path = '/' . ltrim($path, '/');
-    return $base . ($path === '/' ? '' : $path);
+// ===== v3.2: Gunakan fungsi yang sama dengan mentor-navbar.php =====
+if (!function_exists('get_avatar_url')) {
+    function get_avatar_url($avatar, $base = '') {
+        if (empty($avatar)) return '';
+        // Jika sudah URL lengkap (Google avatar), langsung return
+        if (filter_var($avatar, FILTER_VALIDATE_URL)) return $avatar;
+        // Jika path lokal, tambahkan base path
+        return $base . '/' . ltrim($avatar, '/');
+    }
 }
+
+$maxFileSize = 300 * 1024 * 1024;
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -100,155 +138,693 @@ function url_path(string $path = ''): string
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Mentor - JagoNugas</title>
-
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style.css">
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style-mentor-dashboard.css">
-    <link rel="stylesheet" href="<?php echo BASE_PATH; ?>/style-mentor-chat.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; min-height: 100vh; }
+        .chat-container { display: flex; height: calc(100vh - 70px); max-width: 1400px; margin: 0 auto; }
+        .chat-sidebar { width: 340px; background: white; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #e5e7eb; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); }
+        .sidebar-header h2 { font-size: 1.25rem; font-weight: 700; color: #065f46; margin: 0; display: flex; align-items: center; gap: 10px; }
+        .conversation-list { flex: 1; overflow-y: auto; padding: 12px; list-style: none; }
+        .conversation-item { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; text-decoration: none; color: inherit; transition: all 0.2s; margin-bottom: 4px; }
+        .conversation-item:hover { background: #f8f9fa; }
+        .conversation-item.active { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #10b981; }
+        .conv-avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.1rem; flex-shrink: 0; overflow: hidden; }
+        .conv-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .conv-info { flex: 1; min-width: 0; }
+        .conv-name { font-weight: 600; color: #1a202c; margin-bottom: 2px; }
+        .conv-sub { font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .conv-session-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; font-weight: 500; }
+        .conv-session-badge.ongoing { background: #dcfce7; color: #16a34a; }
+        .conv-session-badge.pending { background: #fef3c7; color: #d97706; }
+        .conv-session-badge.completed { background: #e0e7ff; color: #4f46e5; }
+        .conv-unread { background: #ef4444; color: white; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+        .empty-conversations { padding: 40px 20px; text-align: center; color: #64748b; }
+        .empty-conversations i { font-size: 3rem; color: #cbd5e1; margin-bottom: 16px; display: block; }
+        .chat-main { flex: 1; display: flex; flex-direction: column; background: #f8f9fa; }
+        .chat-header { padding: 16px 24px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; }
+        .chat-header-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; overflow: hidden; }
+        .chat-header-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-header-info { flex: 1; }
+        .chat-header-info h3 { font-size: 1rem; font-weight: 600; color: #1a202c; margin: 0; }
+        .chat-header-info span { font-size: 0.85rem; color: #64748b; }
+        .session-badge { padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .session-badge.ongoing { background: #dcfce7; color: #16a34a; }
+        .session-badge.pending { background: #fef3c7; color: #d97706; }
+        .session-badge.completed { background: #e0e7ff; color: #4f46e5; }
+        .session-badge.none { background: #f1f5f9; color: #64748b; }
+        .session-badge i { font-size: 0.5rem; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+        .message-row { display: flex; flex-direction: column; max-width: 70%; position: relative; }
+        .message-row.me { align-self: flex-end; }
+        .message-row.other { align-self: flex-start; }
+        .message-wrapper { position: relative; display: flex; align-items: flex-start; gap: 8px; }
+        .message-row.me .message-wrapper { flex-direction: row-reverse; }
+        .message-bubble { padding: 12px 16px; border-radius: 16px; position: relative; min-width: 80px; }
+        .message-row.me .message-bubble { background: linear-gradient(135deg, #10b981, #059669); color: white; border-bottom-right-radius: 4px; }
+        .message-row.other .message-bubble { background: white; color: #1a202c; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .message-bubble p { margin: 0; line-height: 1.5; word-wrap: break-word; }
+        .message-time { font-size: 0.7rem; opacity: 0.7; margin-top: 4px; display: block; }
+        .message-row.me .message-time { text-align: right; }
+        .message-edited { font-size: 0.65rem; opacity: 0.6; font-style: italic; margin-left: 6px; }
+        .message-actions { display: none; align-items: center; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+        .can-send-message .message-wrapper:hover .message-actions { display: flex; opacity: 1; }
+        .msg-action-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 0.85rem; }
+        .msg-action-btn:hover { background: #e2e8f0; color: #1a202c; }
+        .msg-action-btn.delete:hover { background: #fee2e2; color: #dc2626; }
+        .message-file { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(255,255,255,0.15); border-radius: 10px; margin-top: 8px; text-decoration: none; color: inherit; transition: all 0.2s; }
+        .message-row.other .message-file { background: #f1f5f9; }
+        .message-file:hover { background: rgba(255,255,255,0.25); }
+        .message-row.other .message-file:hover { background: #e2e8f0; }
+        .message-file i { font-size: 1.5rem; }
+        .file-info { flex: 1; min-width: 0; }
+        .file-name { font-weight: 500; font-size: 0.9rem; }
+        .file-size { font-size: 0.75rem; opacity: 0.7; }
+        .message-video-player { margin-top: 8px; border-radius: 12px; overflow: hidden; max-width: 100%; }
+        .message-video-player video { width: 100%; max-height: 300px; border-radius: 12px; }
+        .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid #e5e7eb; }
+        .chat-input-disabled { padding: 20px 24px; background: #f8f9fa; border-top: 1px solid #e5e7eb; text-align: center; color: #64748b; }
+        .chat-input-disabled i { font-size: 1.5rem; margin-bottom: 8px; display: block; }
+        .chat-input-disabled.pending i { color: #d97706; }
+        .chat-input-disabled.completed i { color: #4f46e5; }
+        .chat-input-disabled.no-session i { color: #94a3b8; }
+        .chat-input-disabled p { margin: 0; font-size: 0.9rem; }
+        .edit-indicator { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: #fef3c7; border-radius: 12px; margin-bottom: 12px; font-size: 0.9rem; color: #92400e; }
+        .edit-indicator.show { display: flex; }
+        .edit-indicator i { font-size: 1.1rem; }
+        .edit-indicator span { flex: 1; }
+        .btn-cancel-edit { background: transparent; border: none; color: #92400e; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+        .btn-cancel-edit:hover { background: rgba(0,0,0,0.1); }
+        .file-preview { display: none; align-items: center; gap: 10px; padding: 12px 14px; background: #f1f5f9; border-radius: 12px; margin-bottom: 12px; }
+        .file-preview.show { display: flex; }
+        .file-preview-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #10b981, #059669); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.3rem; }
+        .file-preview-info { flex: 1; }
+        .file-preview-name { font-weight: 500; font-size: 0.9rem; }
+        .file-preview-size { font-size: 0.8rem; color: #64748b; }
+        .btn-remove-file { background: #fee2e2; color: #dc2626; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .upload-progress { display: none; margin-bottom: 12px; }
+        .upload-progress.show { display: block; }
+        .progress-bar-container { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .progress-bar { height: 100%; background: linear-gradient(135deg, #10b981, #059669); border-radius: 4px; transition: width 0.3s; width: 0%; }
+        .progress-text { font-size: 0.8rem; color: #64748b; margin-top: 6px; text-align: center; }
+        .input-wrapper { display: flex; align-items: flex-end; gap: 12px; background: #f8f9fa; border-radius: 24px; padding: 8px 8px 8px 20px; border: 2px solid transparent; transition: all 0.2s; }
+        .input-wrapper:focus-within { border-color: #10b981; background: white; }
+        .input-wrapper textarea { flex: 1; border: none; background: transparent; resize: none; padding: 8px 0; font-size: 0.95rem; line-height: 1.5; max-height: 120px; outline: none; font-family: inherit; }
+        .input-actions { display: flex; align-items: center; gap: 4px; }
+        .btn-attach, .btn-send { width: 40px; height: 40px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+        .btn-attach { background: transparent; color: #64748b; }
+        .btn-attach:hover { background: #e2e8f0; color: #10b981; }
+        .btn-send { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+        .btn-send:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
+        .btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .file-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; text-align: center; }
+        .empty-chat { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #64748b; text-align: center; padding: 40px; }
+        .empty-chat i { font-size: 4rem; color: #cbd5e1; margin-bottom: 20px; }
+        .empty-chat h2 { font-size: 1.25rem; color: #1a202c; margin-bottom: 8px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+        .modal-box { background: white; border-radius: 20px; padding: 32px; max-width: 420px; width: 90%; text-align: center; }
+        .modal-icon { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 2rem; }
+        .modal-icon.danger { background: #fef2f2; color: #dc2626; }
+        .modal-box h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; }
+        .modal-box p { color: #64748b; margin-bottom: 24px; }
+        .modal-actions { display: flex; gap: 12px; justify-content: center; }
+        .btn-modal { padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; }
+        .btn-modal-cancel { background: #f1f5f9; color: #475569; }
+        .btn-modal-cancel:hover { background: #e2e8f0; }
+        .btn-modal-confirm { background: #ef4444; color: white; }
+        .btn-modal-confirm:hover { background: #dc2626; }
+        .toast-notification { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1a202c; color: white; padding: 12px 24px; border-radius: 12px; font-size: 0.9rem; z-index: 1001; opacity: 0; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
+        .toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast-notification.success { background: #16a34a; }
+        .toast-notification.error { background: #dc2626; }
+        .typing-indicator { display: none; align-items: center; gap: 8px; padding: 12px 16px; background: white; border-radius: 16px; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); max-width: fit-content; margin-bottom: 8px; align-self: flex-start; }
+        .typing-indicator.show { display: flex; }
+        .typing-dots { display: flex; gap: 4px; }
+        .typing-dots span { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out; }
+        .typing-dots span:nth-child(1) { animation-delay: 0s; }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+        .typing-text { font-size: 0.85rem; color: #64748b; font-style: italic; }
+        @media (max-width: 768px) {
+            .chat-sidebar { width: 100%; position: absolute; left: 0; top: 70px; bottom: 0; z-index: 50; transform: translateX(-100%); transition: transform 0.3s; }
+            .chat-sidebar.show { transform: translateX(0); }
+            .message-row { max-width: 85%; }
+        }
+    </style>
 </head>
-<body class="mentor-dashboard-page">
+<body>
 
-<header class="mentor-navbar">
-    <div class="mentor-navbar-inner">
-        <div class="mentor-navbar-left">
-            <a href="<?php echo htmlspecialchars(url_path('mentor-dashboard.php')); ?>" class="mentor-logo">
-                <div class="mentor-logo-mark">M</div>
-                <span class="mentor-logo-text">JagoNugas</span>
-                <span class="mentor-badge">Mentor</span>
-            </a>
-            <nav class="mentor-nav-links">
-                <a href="<?php echo htmlspecialchars(url_path('mentor-dashboard.php')); ?>">Dashboard</a>
-                <a href="<?php echo htmlspecialchars(url_path('mentor-sessions.php')); ?>">Booking Saya</a>
-                <a href="<?php echo htmlspecialchars(url_path('mentor-chat.php')); ?>" class="active">Chat</a>
-            </nav>
+<?php include __DIR__ . '/mentor-navbar.php'; ?>
+
+<div class="chat-container">
+    <aside class="chat-sidebar" id="chatSidebar">
+        <div class="sidebar-header">
+            <h2><i class="bi bi-chat-heart"></i> Chat Mahasiswa</h2>
         </div>
-
-        <div class="mentor-navbar-right">
-            <div class="mentor-user-menu">
-                <div class="mentor-avatar"><?php echo htmlspecialchars($initial); ?></div>
-                <div class="mentor-user-info">
-                    <span class="mentor-user-name"><?php echo htmlspecialchars($name); ?></span>
-                    <span class="mentor-user-role">Mentor</span>
+        <ul class="conversation-list">
+            <?php if (empty($filteredConversations)): ?>
+                <div class="empty-conversations">
+                    <i class="bi bi-inbox"></i>
+                    <p>Belum ada percakapan.<br>Chat akan muncul setelah ada sesi dengan mahasiswa.</p>
                 </div>
-                <i class="bi bi-chevron-down"></i>
-                <div class="mentor-dropdown">
-                    <a href="<?php echo htmlspecialchars(url_path('mentor-profile.php')); ?>"><i class="bi bi-person"></i> Profil Saya</a>
-                    <a href="<?php echo htmlspecialchars(url_path('mentor-settings.php')); ?>"><i class="bi bi-gear"></i> Pengaturan</a>
-                    <div class="dropdown-divider"></div>
-                    <a href="<?php echo htmlspecialchars(url_path('logout.php')); ?>" class="logout"><i class="bi bi-box-arrow-right"></i> Keluar</a>
-                </div>
-            </div>
-        </div>
-    </div>
-</header>
-
-<main class="mentor-main">
-    <div class="chat-layout">
-        <!-- Sidebar conversations -->
-        <aside class="chat-sidebar">
-            <div class="chat-sidebar-header">
-                <h2>Chat Mahasiswa</h2>
-            </div>
-
-            <?php if (empty($conversations)): ?>
-                <p class="chat-empty">Belum ada percakapan. Chat akan muncul setelah ada sesi dengan mahasiswa.</p>
             <?php else: ?>
-                <ul class="chat-conversation-list">
-                    <?php foreach ($conversations as $conv): ?>
-                        <?php
-                            $cId     = (int)$conv['id'];
-                            $initialS = 'S';
-                            if (!empty($conv['student_name'])) {
-                                $initialS = function_exists('mb_substr')
-                                    ? mb_strtoupper(mb_substr($conv['student_name'], 0, 1, 'UTF-8'), 'UTF-8')
-                                    : strtoupper(substr($conv['student_name'], 0, 1));
-                            }
-                            $active = $currentConvId === $cId;
-                        ?>
-                        <li>
-                            <a href="?conversation_id=<?php echo $cId; ?>"
-                               class="chat-conversation-item <?php echo $active ? 'active' : ''; ?>">
-                                <div class="chat-avatar"><?php echo htmlspecialchars($initialS); ?></div>
-                                <div class="chat-conversation-info">
-                                    <div class="chat-conversation-name">
-                                        <?php echo htmlspecialchars($conv['student_name']); ?>
-                                    </div>
-                                    <?php if (!empty($conv['student_prodi'])): ?>
-                                        <div class="chat-conversation-sub">
-                                            <?php echo htmlspecialchars($conv['student_prodi']); ?>
-                                        </div>
+                <?php foreach ($filteredConversations as $conv): 
+                    $cId = (int)$conv['conversation_id'];
+                    $studentInitial = mb_strtoupper(mb_substr($conv['student_name'] ?? 'S', 0, 1, 'UTF-8'), 'UTF-8');
+                    // v3.2: Pakai get_avatar_url() yang sama dengan navbar
+                    $studentAvatarUrl = get_avatar_url($conv['student_avatar'] ?? '', BASE_PATH);
+                    $isActive = ($currentConvId === $cId);
+                    
+                    $badgeStatus = 'none';
+                    if ($conv['session_ended_at']) {
+                        $badgeStatus = 'completed';
+                    } elseif ($conv['session_status']) {
+                        $badgeStatus = $conv['session_status'];
+                    }
+                ?>
+                <li>
+                    <a href="?conversation_id=<?= $cId ?>" class="conversation-item <?= $isActive ? 'active' : '' ?>">
+                        <div class="conv-avatar">
+                            <?php if ($studentAvatarUrl): ?>
+                                <img src="<?= htmlspecialchars($studentAvatarUrl) ?>" alt="" referrerpolicy="no-referrer">
+                            <?php else: ?>
+                                <?= htmlspecialchars($studentInitial) ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="conv-info">
+                            <div class="conv-name"><?= htmlspecialchars($conv['student_name']) ?></div>
+                            <div class="conv-sub">
+                                <?= htmlspecialchars($conv['student_prodi'] ?? 'Mahasiswa') ?>
+                                <?php if ($badgeStatus !== 'none'): ?>
+                                    <span class="conv-session-badge <?= $badgeStatus ?>">
+                                        <?php
+                                        if ($badgeStatus === 'ongoing') echo 'Aktif';
+                                        elseif ($badgeStatus === 'pending') echo 'Pending';
+                                        elseif ($badgeStatus === 'completed') echo 'Selesai';
+                                        ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php if ($conv['unread_count'] > 0): ?>
+                            <span class="conv-unread"><?= $conv['unread_count'] ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </ul>
+    </aside>
+
+    <main class="chat-main">
+        <?php if (!$currentConvId || !$currentConv): ?>
+            <div class="empty-chat">
+                <i class="bi bi-chat-dots"></i>
+                <h2>Pilih Percakapan</h2>
+                <p>Pilih mahasiswa di sebelah kiri untuk mulai chat.</p>
+            </div>
+        <?php else: ?>
+            <?php 
+            $studentInitial = mb_strtoupper(mb_substr($currentConv['student_name'], 0, 1, 'UTF-8'), 'UTF-8');
+            // v3.2: Pakai get_avatar_url() yang sama dengan navbar
+            $headerAvatarUrl = get_avatar_url($currentConv['student_avatar'] ?? '', BASE_PATH);
+            $sessionStatus = $currentSession['status'] ?? '';
+            ?>
+            <div class="chat-header">
+                <div class="chat-header-avatar">
+                    <?php if ($headerAvatarUrl): ?>
+                        <!-- v3.2: Fixed typo - removed extra ) after htmlspecialchars -->
+                        <img src="<?= htmlspecialchars($headerAvatarUrl) ?>" alt="" referrerpolicy="no-referrer">
+                    <?php else: ?>
+                        <?= htmlspecialchars($studentInitial) ?>
+                    <?php endif; ?>
+                </div>
+                <div class="chat-header-info">
+                    <h3><?= htmlspecialchars($currentConv['student_name']) ?></h3>
+                    <span><?= htmlspecialchars($currentConv['student_prodi'] ?? 'Mahasiswa') ?></span>
+                </div>
+                <?php if ($sessionStatus === 'ongoing'): ?>
+                    <span class="session-badge ongoing"><i class="bi bi-circle-fill"></i> Sesi Aktif</span>
+                <?php elseif ($sessionStatus === 'pending'): ?>
+                    <span class="session-badge pending"><i class="bi bi-circle-fill"></i> Menunggu Konfirmasi</span>
+                <?php elseif ($sessionStatus === 'completed'): ?>
+                    <span class="session-badge completed"><i class="bi bi-circle-fill"></i> Sesi Selesai</span>
+                <?php else: ?>
+                    <span class="session-badge none"><i class="bi bi-circle-fill"></i> Tidak Ada Sesi</span>
+                <?php endif; ?>
+            </div>
+
+            <div class="chat-messages <?= $canSendMessage ? 'can-send-message' : '' ?>" id="chatMessages" 
+                 data-conversation="<?= $currentConvId ?>" data-can-send="<?= $canSendMessage ? '1' : '0' ?>">
+                <?php if (empty($currentMsgs)): ?>
+                    <div class="empty-chat" style="padding: 60px 20px;">
+                        <i class="bi bi-chat-text" style="font-size: 3rem;"></i>
+                        <p>Belum ada pesan. <?= $canSendMessage ? 'Mulai percakapan!' : '' ?></p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($currentMsgs as $msg): 
+                        $isMe = ($msg['sender_id'] == $mentor_id);
+                        $isVideo = !empty($msg['file_path']) && preg_match('/\.(mp4|webm|mov)$/i', $msg['file_path']);
+                        $isEdited = !empty($msg['edited_at']);
+                    ?>
+                        <div class="message-row <?= $isMe ? 'me' : 'other' ?>" data-message-id="<?= $msg['id'] ?>" data-edited="<?= $isEdited ? '1' : '0' ?>">
+                            <div class="message-wrapper">
+                                <div class="message-actions">
+                                    <?php if ($isMe): ?>
+                                        <button type="button" class="msg-action-btn edit" title="Edit" data-message-id="<?= $msg['id'] ?>" data-message-text="<?= htmlspecialchars($msg['message'] ?? '', ENT_QUOTES) ?>"><i class="bi bi-pencil"></i></button>
+                                        <button type="button" class="msg-action-btn delete" title="Hapus" data-message-id="<?= $msg['id'] ?>"><i class="bi bi-trash"></i></button>
+                                    <?php else: ?>
+                                        <button type="button" class="msg-action-btn copy" title="Salin" data-message-text="<?= htmlspecialchars($msg['message'] ?? '', ENT_QUOTES) ?>"><i class="bi bi-clipboard"></i></button>
                                     <?php endif; ?>
                                 </div>
-                            </a>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            <?php endif; ?>
-        </aside>
-
-        <!-- Chat main panel -->
-        <section class="chat-main">
-            <?php if (!$currentConvId || !$currentConv): ?>
-                <div class="chat-empty-state">
-                    <i class="bi bi-chat-dots"></i>
-                    <h2>Pilih percakapan</h2>
-                    <p>Pilih salah satu mahasiswa di sisi kiri untuk mulai melihat pesan.</p>
-                </div>
-            <?php else: ?>
-                <div class="chat-header">
-                    <?php
-                        $initialS = function_exists('mb_substr')
-                            ? mb_strtoupper(mb_substr($currentConv['student_name'], 0, 1, 'UTF-8'), 'UTF-8')
-                            : strtoupper(substr($currentConv['student_name'], 0, 1));
-                    ?>
-                    <div class="chat-avatar"><?php echo htmlspecialchars($initialS); ?></div>
-                    <div>
-                        <div class="chat-header-name">
-                            <?php echo htmlspecialchars($currentConv['student_name']); ?>
-                        </div>
-                        <div class="chat-header-sub">Mahasiswa</div>
-                    </div>
-                </div>
-
-                <div class="chat-messages" id="chatMessages">
-                    <?php if (empty($currentMsgs)): ?>
-                        <div class="chat-empty-thread">
-                            Belum ada pesan. Mulai percakapan dengan mengirim pesan pertama.
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($currentMsgs as $msg): ?>
-                            <?php $isMe = $msg['sender_id'] == $mentor_id; ?>
-                            <div class="chat-message-row <?php echo $isMe ? 'me' : 'other'; ?>">
-                                <div class="chat-message-bubble">
-                                    <p><?php echo nl2br(htmlspecialchars($msg['message'])); ?></p>
-                                    <span class="chat-message-time">
-                                        <?php echo date('H:i', strtotime($msg['created_at'])); ?>
+                                <div class="message-bubble">
+                                    <?php if (!empty($msg['message'])): ?>
+                                        <p><?= nl2br(htmlspecialchars($msg['message'])) ?></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($msg['file_path'])): ?>
+                                        <?php if ($isVideo): ?>
+                                            <div class="message-video-player">
+                                                <video controls preload="metadata">
+                                                    <source src="<?= BASE_PATH ?? '' ?>/<?= htmlspecialchars($msg['file_path']) ?>" type="video/mp4">
+                                                </video>
+                                            </div>
+                                            <a href="<?= BASE_PATH ?? '' ?>/<?= htmlspecialchars($msg['file_path']) ?>" target="_blank" class="message-file" download>
+                                                <i class="bi bi-file-earmark-play"></i>
+                                                <div class="file-info">
+                                                    <div class="file-name"><?= htmlspecialchars($msg['file_name'] ?? 'Video') ?></div>
+                                                    <div class="file-size"><?= round(($msg['file_size'] ?? 0) / (1024*1024), 1) ?> MB</div>
+                                                </div>
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="<?= BASE_PATH ?? '' ?>/<?= htmlspecialchars($msg['file_path']) ?>" target="_blank" class="message-file">
+                                                <i class="bi bi-file-earmark"></i>
+                                                <div class="file-info">
+                                                    <div class="file-name"><?= htmlspecialchars($msg['file_name'] ?? 'File') ?></div>
+                                                    <div class="file-size"><?= round(($msg['file_size'] ?? 0) / 1024, 1) ?> KB</div>
+                                                </div>
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    <span class="message-time">
+                                        <?= date('H:i', strtotime($msg['created_at'])) ?>
+                                        <?php if ($isEdited): ?><span class="message-edited">(diedit)</span><?php endif; ?>
                                     </span>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="typing-dots"><span></span><span></span><span></span></div>
+                    <span class="typing-text" id="typingText">sedang mengetik...</span>
                 </div>
+            </div>
 
-                <form class="chat-input-area" method="POST" action="<?php echo BASE_PATH; ?>/mentor-chat-send.php">
-                    <input type="hidden" name="conversation_id" value="<?php echo (int)$currentConvId; ?>">
-                    <div class="chat-input-wrapper">
-                        <textarea name="message" rows="1" placeholder="Tulis pesan..." required></textarea>
-                        <button type="submit" class="chat-send-btn">
-                            <i class="bi bi-send-fill"></i>
-                        </button>
+            <?php if ($canSendMessage): ?>
+                <form class="chat-input-area" id="chatForm" enctype="multipart/form-data">
+                    <input type="hidden" name="conversation_id" value="<?= $currentConvId ?>">
+                    <input type="hidden" name="edit_message_id" id="editMessageId" value="">
+                    <div class="edit-indicator" id="editIndicator">
+                        <i class="bi bi-pencil-square"></i>
+                        <span>Mengedit pesan</span>
+                        <button type="button" class="btn-cancel-edit" id="btnCancelEdit"><i class="bi bi-x-lg"></i> Batal</button>
                     </div>
+                    <div class="file-preview" id="filePreview">
+                        <div class="file-preview-icon" id="previewIcon"><i class="bi bi-file-earmark"></i></div>
+                        <div class="file-preview-info">
+                            <div class="file-preview-name" id="previewFileName">-</div>
+                            <div class="file-preview-size" id="previewFileSize">-</div>
+                        </div>
+                        <button type="button" class="btn-remove-file" id="btnRemoveFile"><i class="bi bi-x"></i></button>
+                    </div>
+                    <div class="upload-progress" id="uploadProgress">
+                        <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+                        <div class="progress-text" id="progressText">Mengupload... 0%</div>
+                    </div>
+                    <div class="input-wrapper">
+                        <textarea name="message" id="messageInput" rows="1" placeholder="Tulis pesan..."></textarea>
+                        <div class="input-actions">
+                            <input type="file" name="attachment" id="fileInput" hidden accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.txt,.mp4,.webm,.mov">
+                            <button type="button" class="btn-attach" id="btnAttach" title="Lampirkan file"><i class="bi bi-paperclip"></i></button>
+                            <button type="submit" class="btn-send" id="btnSend"><i class="bi bi-send-fill"></i></button>
+                        </div>
+                    </div>
+                    <p class="file-hint"><i class="bi bi-info-circle"></i> JPG, PNG, GIF, PDF, DOC, TXT (5MB) | MP4, WebM, MOV (300MB)</p>
                 </form>
+            <?php elseif ($sessionStatus === 'pending'): ?>
+                <div class="chat-input-disabled pending">
+                    <i class="bi bi-hourglass-split"></i>
+                    <p><strong>Menunggu konfirmasi sesi</strong><br>Chat akan aktif setelah Anda menerima permintaan sesi dari mahasiswa.</p>
+                </div>
+            <?php elseif ($sessionStatus === 'completed'): ?>
+                <div class="chat-input-disabled completed">
+                    <i class="bi bi-check-circle"></i>
+                    <p><strong>Sesi telah selesai</strong><br>Anda masih bisa melihat chat history, tapi tidak bisa mengirim pesan baru.</p>
+                </div>
+            <?php else: ?>
+                <div class="chat-input-disabled no-session">
+                    <i class="bi bi-chat-left-dots"></i>
+                    <p><strong>Tidak ada sesi aktif</strong><br>Mahasiswa perlu membuat permintaan sesi untuk chat.</p>
+                </div>
             <?php endif; ?>
-        </section>
+        <?php endif; ?>
+    </main>
+</div>
+
+<div class="modal-overlay" id="modalDeleteMessage">
+    <div class="modal-box">
+        <div class="modal-icon danger"><i class="bi bi-trash"></i></div>
+        <h3>Hapus Pesan?</h3>
+        <p>Pesan akan dihapus untuk Anda dan mahasiswa. Tindakan ini tidak dapat dibatalkan.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn-modal btn-modal-cancel" id="btnCancelDelete">Batal</button>
+            <button type="button" class="btn-modal btn-modal-confirm" id="btnConfirmDelete">Ya, Hapus</button>
+        </div>
     </div>
-</main>
+</div>
+
+<div class="toast-notification" id="toast">
+    <i class="bi bi-check-circle"></i>
+    <span id="toastMessage">Berhasil</span>
+</div>
 
 <script>
-const msgBox = document.getElementById('chatMessages');
-if (msgBox) {
-    msgBox.scrollTop = msgBox.scrollHeight;
-}
+document.addEventListener('DOMContentLoaded', function() {
+    const chatMessages = document.getElementById('chatMessages');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const fileInput = document.getElementById('fileInput');
+    const btnAttach = document.getElementById('btnAttach');
+    const btnSend = document.getElementById('btnSend');
+    const filePreview = document.getElementById('filePreview');
+    const previewFileName = document.getElementById('previewFileName');
+    const previewFileSize = document.getElementById('previewFileSize');
+    const previewIcon = document.getElementById('previewIcon');
+    const btnRemoveFile = document.getElementById('btnRemoveFile');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const editIndicator = document.getElementById('editIndicator');
+    const editMessageId = document.getElementById('editMessageId');
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+    const modalDelete = document.getElementById('modalDeleteMessage');
+    const btnCancelDelete = document.getElementById('btnCancelDelete');
+    const btnConfirmDelete = document.getElementById('btnConfirmDelete');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+
+    let deleteMessageId = null;
+    const maxFileSize = <?= $maxFileSize ?>;
+
+    if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    function showToast(message, type = 'success') {
+        toastMessage.textContent = message;
+        toast.className = 'toast-notification show ' + type;
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    btnAttach?.addEventListener('click', () => fileInput?.click());
+
+    fileInput?.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            const file = this.files[0];
+            if (file.size > maxFileSize) {
+                showToast('File terlalu besar! Maks 300MB untuk video, 5MB untuk file lain.', 'error');
+                this.value = '';
+                return;
+            }
+            previewFileName.textContent = file.name;
+            previewFileSize.textContent = formatFileSize(file.size);
+            const isVideo = /\.(mp4|webm|mov)$/i.test(file.name);
+            previewIcon.innerHTML = isVideo ? '<i class="bi bi-file-earmark-play"></i>' : '<i class="bi bi-file-earmark"></i>';
+            filePreview.classList.add('show');
+        }
+    });
+
+    btnRemoveFile?.addEventListener('click', function() {
+        fileInput.value = '';
+        filePreview.classList.remove('show');
+    });
+
+    messageInput?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    messageInput?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatForm?.dispatchEvent(new Event('submit'));
+        }
+    });
+
+    chatForm?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        const file = fileInput.files[0];
+        const editId = editMessageId.value;
+
+        if (!message && !file && !editId) return;
+
+        btnSend.disabled = true;
+        const formData = new FormData();
+        formData.append('conversation_id', this.querySelector('[name="conversation_id"]').value);
+        formData.append('message', message);
+        if (file) formData.append('attachment', file);
+        if (editId) formData.append('edit_message_id', editId);
+
+        try {
+            if (file) {
+                uploadProgress.classList.add('show');
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '<?= BASE_PATH ?>/api-chat-send.php', true);
+                xhr.upload.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = percent + '%';
+                        progressText.textContent = 'Mengupload... ' + percent + '%';
+                    }
+                };
+                xhr.onload = function() {
+                    uploadProgress.classList.remove('show');
+                    progressBar.style.width = '0%';
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.success) {
+                            messageInput.value = '';
+                            messageInput.style.height = 'auto';
+                            fileInput.value = '';
+                            filePreview.classList.remove('show');
+                            cancelEdit();
+                            if (data.message_html) {
+                                const emptyChat = chatMessages.querySelector('.empty-chat');
+                                if (emptyChat) emptyChat.remove();
+                                const typingIndicator = document.getElementById('typingIndicator');
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = data.message_html;
+                                const newRow = tempDiv.firstElementChild;
+                                if (typingIndicator) chatMessages.insertBefore(newRow, typingIndicator);
+                                else chatMessages.appendChild(newRow);
+                                attachMessageActions(newRow);
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                            showToast(editId ? 'Pesan diperbarui!' : 'Pesan terkirim!');
+                        } else {
+                            showToast(data.error || 'Gagal mengirim pesan', 'error');
+                        }
+                    } catch (err) {
+                        showToast('Terjadi kesalahan', 'error');
+                    }
+                    btnSend.disabled = false;
+                };
+                xhr.onerror = function() {
+                    uploadProgress.classList.remove('show');
+                    showToast('Gagal mengirim file', 'error');
+                    btnSend.disabled = false;
+                };
+                xhr.send(formData);
+            } else {
+                const response = await fetch('<?= BASE_PATH ?>/api-chat-send.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    messageInput.value = '';
+                    messageInput.style.height = 'auto';
+                    cancelEdit();
+                    if (editId) {
+                        const existingRow = document.querySelector(`.message-row[data-message-id="${editId}"]`);
+                        if (existingRow) {
+                            const bubble = existingRow.querySelector('.message-bubble p');
+                            if (bubble) bubble.innerHTML = message.replace(/\n/g, '<br>');
+                            const timeSpan = existingRow.querySelector('.message-time');
+                            if (timeSpan && !timeSpan.querySelector('.message-edited')) {
+                                timeSpan.innerHTML += ' <span class="message-edited">(diedit)</span>';
+                            }
+                            existingRow.dataset.edited = '1';
+                            const editBtn = existingRow.querySelector('.msg-action-btn.edit');
+                            if (editBtn) editBtn.dataset.messageText = message;
+                        }
+                        showToast('Pesan diperbarui!');
+                    } else if (data.message_html) {
+                        const emptyChat = chatMessages.querySelector('.empty-chat');
+                        if (emptyChat) emptyChat.remove();
+                        const typingIndicator = document.getElementById('typingIndicator');
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = data.message_html;
+                        const newRow = tempDiv.firstElementChild;
+                        if (typingIndicator) chatMessages.insertBefore(newRow, typingIndicator);
+                        else chatMessages.appendChild(newRow);
+                        attachMessageActions(newRow);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        showToast('Pesan terkirim!');
+                    }
+                } else {
+                    showToast(data.error || 'Gagal mengirim pesan', 'error');
+                }
+                btnSend.disabled = false;
+            }
+        } catch (err) {
+            showToast('Terjadi kesalahan', 'error');
+            btnSend.disabled = false;
+        }
+    });
+
+    function cancelEdit() {
+        editMessageId.value = '';
+        editIndicator.classList.remove('show');
+    }
+
+    btnCancelEdit?.addEventListener('click', cancelEdit);
+
+    function attachMessageActions(row) {
+        row.querySelector('.msg-action-btn.edit')?.addEventListener('click', function() {
+            const msgId = this.dataset.messageId;
+            const msgText = this.dataset.messageText;
+            editMessageId.value = msgId;
+            messageInput.value = msgText;
+            messageInput.focus();
+            editIndicator.classList.add('show');
+        });
+
+        row.querySelector('.msg-action-btn.delete')?.addEventListener('click', function() {
+            deleteMessageId = this.dataset.messageId;
+            modalDelete.classList.add('show');
+        });
+
+        row.querySelector('.msg-action-btn.copy')?.addEventListener('click', async function() {
+            try {
+                await navigator.clipboard.writeText(this.dataset.messageText);
+                showToast('Pesan disalin ke clipboard');
+            } catch (err) {
+                const ta = document.createElement('textarea');
+                ta.value = this.dataset.messageText;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('Pesan disalin ke clipboard');
+            }
+        });
+    }
+
+    document.querySelectorAll('.message-row').forEach(attachMessageActions);
+
+    btnCancelDelete?.addEventListener('click', () => {
+        modalDelete.classList.remove('show');
+        deleteMessageId = null;
+    });
+
+    btnConfirmDelete?.addEventListener('click', async function() {
+        if (!deleteMessageId) return;
+        try {
+            const response = await fetch('<?= BASE_PATH ?>/api-chat-delete.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message_id: deleteMessageId})
+            });
+            const data = await response.json();
+            if (data.success) {
+                const row = document.querySelector(`.message-row[data-message-id="${deleteMessageId}"]`);
+                if (row) {
+                    row.style.transition = 'opacity 0.3s, transform 0.3s';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    setTimeout(() => row.remove(), 300);
+                }
+                showToast('Pesan dihapus');
+            } else {
+                showToast(data.error || 'Gagal menghapus pesan', 'error');
+            }
+        } catch (err) {
+            showToast('Terjadi kesalahan', 'error');
+        }
+        modalDelete.classList.remove('show');
+        deleteMessageId = null;
+    });
+
+    // Polling new messages
+    if (chatMessages) {
+        const convId = chatMessages.dataset.conversation;
+        let lastId = 0;
+        const allMessages = chatMessages.querySelectorAll('.message-row[data-message-id]');
+        if (allMessages.length > 0) lastId = parseInt(allMessages[allMessages.length - 1].dataset.messageId) || 0;
+        async function pollMessages() {
+            try {
+                const response = await fetch(`<?= BASE_PATH ?>/api-chat-messages.php?conversation_id=${convId}&last_id=${lastId}&include_updated=1`);
+                const data = await response.json();
+                if (!data.success) return;
+                if (data.last_id) lastId = data.last_id;
+                if (data.existing_ids) { const existingSet = new Set(data.existing_ids); document.querySelectorAll('.message-row[data-message-id]').forEach(row => { const msgId = parseInt(row.dataset.messageId); if (!existingSet.has(msgId)) { row.style.transition = 'opacity 0.3s, transform 0.3s'; row.style.opacity = '0'; row.style.transform = 'translateX(20px)'; setTimeout(() => row.remove(), 300); } }); }
+                if (data.messages?.length > 0) {
+                    data.messages.forEach(msg => {
+                        const existingRow = document.querySelector(`.message-row[data-message-id="${msg.id}"]`);
+                        if (existingRow) {
+                            const wasEdited = existingRow.dataset.edited === '1', nowEdited = msg.is_edited || msg.edited_at;
+                            if (nowEdited && !wasEdited) {
+                                const bubble = existingRow.querySelector('.message-bubble p'); if (bubble && msg.message) bubble.innerHTML = msg.message.replace(/\n/g, '<br>');
+                                const timeSpan = existingRow.querySelector('.message-time'); if (timeSpan && !timeSpan.querySelector('.message-edited')) timeSpan.innerHTML += ' <span class="message-edited">(diedit)</span>';
+                                existingRow.dataset.edited = '1'; existingRow.style.transition = 'background 0.3s'; existingRow.style.background = 'rgba(16, 185, 129, 0.1)'; setTimeout(() => existingRow.style.background = '', 1500);
+                            }
+                        } else if (msg.sender_id != <?= $mentor_id ?>) { appendOtherMessage(msg); }
+                    });
+                }
+            } catch (err) {}
+        }
+        setInterval(pollMessages, 3000);
+    }
+
+    function appendOtherMessage(msg) {
+        const emptyChat = chatMessages?.querySelector('.empty-chat'); if (emptyChat) emptyChat.remove();
+        const row = document.createElement('div'); row.className = 'message-row other'; row.dataset.messageId = msg.id; row.dataset.edited = (msg.is_edited || msg.edited_at) ? '1' : '0';
+        let fileHtml = '';
+        if (msg.file_path) {
+            const isVideo = /\.(mp4|webm|mov)$/i.test(msg.file_path);
+            if (isVideo) fileHtml = `<div class="message-video-player"><video controls preload="metadata"><source src="<?= BASE_PATH ?>/${msg.file_path}" type="video/mp4"></video></div><a href="<?= BASE_PATH ?>/${msg.file_path}" target="_blank" class="message-file" download><i class="bi bi-file-earmark-play"></i><div class="file-info"><div class="file-name">${msg.file_name || 'Video'}</div><div class="file-size">${((msg.file_size || 0) / (1024*1024)).toFixed(1)} MB</div></div><i class="bi bi-download"></i></a>`;
+            else fileHtml = `<a href="<?= BASE_PATH ?>/${msg.file_path}" target="_blank" class="message-file"><i class="bi bi-file-earmark"></i><div class="file-info"><div class="file-name">${msg.file_name || 'File'}</div><div class="file-size">${((msg.file_size || 0) / 1024).toFixed(1)} KB</div></div><i class="bi bi-download"></i></a>`;
+        }
+        const escapedMsg = msg.message ? msg.message.replace(/"/g, '&quot;') : '';
+        const editedIndicator = (msg.is_edited || msg.edited_at) ? ' <span class="message-edited">(diedit)</span>' : '';
+        row.innerHTML = `<div class="message-wrapper"><div class="message-actions"><button type="button" class="msg-action-btn copy" title="Salin" data-message-text="${escapedMsg}"><i class="bi bi-clipboard"></i></button></div><div class="message-bubble">${msg.message ? '<p>' + msg.message.replace(/\n/g, '<br>') + '</p>' : ''}${fileHtml}<span class="message-time">${msg.time}${editedIndicator}</span></div></div>`;
+        row.querySelector('.msg-action-btn.copy')?.addEventListener('click', async function() { try { await navigator.clipboard.writeText(this.dataset.messageText); showToast('Pesan disalin ke clipboard'); } catch (err) { const ta = document.createElement('textarea'); ta.value = this.dataset.messageText; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Pesan disalin ke clipboard'); } });
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) chatMessages?.insertBefore(row, typingIndicator); else chatMessages?.appendChild(row);
+        if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+});
 </script>
 </body>
 </html>

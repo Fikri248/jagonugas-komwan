@@ -1,5 +1,5 @@
 <?php
-// app.php - Simple Router untuk struktur flat (updated with PAYMENT ROUTES)
+// app.php - Simple Router untuk struktur flat (updated with CHAT & FORUM ROUTES)
 
 declare(strict_types=1);
 
@@ -90,6 +90,10 @@ $staticRoutes = [
     'settings' => 'student-settings.php',
     'sessions' => 'student-sessions.php',
     'gems' => 'student-gems-purchase.php',
+    
+    // ===== STUDENT CHAT (NEW) =====
+    'chat' => 'student-chat.php',
+    'chat-history' => 'student-chat-history.php',
 
     // ===== FORUM =====
     'forum' => 'student-forum.php',
@@ -104,6 +108,8 @@ $staticRoutes = [
     'mentor/dashboard' => 'mentor-dashboard.php',
     'mentor/sessions' => 'mentor-sessions.php',
     'mentor/chat' => 'mentor-chat.php',
+    'mentor/chat-history' => 'mentor-chat-history.php',
+    'mentor/forum' => 'mentor-forum.php',
     'mentor/profile' => 'mentor-profile.php',
     'mentor/settings' => 'mentor-settings.php',
 
@@ -111,16 +117,26 @@ $staticRoutes = [
     'admin/dashboard' => 'admin-dashboard.php',
     'admin/mentors' => 'admin-mentors.php',
 
-    // ===== PAYMENT ROUTES (NEW!) =====
+    // ===== PAYMENT ROUTES =====
     'payment-process.php' => 'payment-process.php',
     'payment-direct-update.php' => 'payment-direct-update.php',
     'payment-cancel.php' => 'payment-cancel.php',
     
-
-    // ===== API =====
+    // ===== API - FORUM =====
     'api/forum/upvote' => 'api-forum-upvote.php',
+    
+    // ===== API - NOTIFICATIONS =====
     'api/notifications/read' => 'api-notif-read.php',
     'api/notifications/read-all' => 'api-notif-read-all.php',
+    
+    // ===== API - CHAT (NEW) =====
+    'api/chat/messages' => 'api-chat-messages.php',
+    'api/chat/send' => 'student-chat-send.php',
+    'api/message/delete' => 'api-message-delete.php',
+    'api/typing-status' => 'api-typing-status.php',
+    
+    // ===== API - SESSION (NEW) =====
+    'api/session/end' => 'api-session-end.php',
 ];
 
 // Invalid path guard
@@ -148,6 +164,12 @@ if (preg_match('#^forum/edit/(\d+)$#', $request, $m) === 1) {
 if (preg_match('#^forum/thread/(\d+)$#', $request, $m) === 1) {
     $_GET['id'] = $m[1];
     includeRouteFile('student-forum-thread.php');
+}
+
+// ===== MENTOR FORUM THREAD (NEW) =====
+if (preg_match('#^mentor/forum/thread/(\d+)$#', $request, $m) === 1) {
+    $_GET['id'] = $m[1];
+    includeRouteFile('mentor-forum-thread.php');
 }
 
 if (preg_match('#^book-session/(\d+)$#', $request, $m) === 1) {

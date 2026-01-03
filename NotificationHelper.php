@@ -20,7 +20,7 @@ class NotificationHelper {
             'color' => '#3b82f6'
         ],
         'best_answer' => [
-            'title' => 'Dapat 100 Gem! 💎',
+            'title' => 'Dapat Gem! 💎',
             'icon'  => 'gem',
             'color' => '#8b5cf6'
         ],
@@ -283,7 +283,7 @@ class NotificationHelper {
         return $this->create(
             $studentId,
             'booking_completed',
-            'Sesi dengan ' . $mentorName . ' telah selesai. Jangan lupa beri rating ya!',
+            'Sesi dengan ' . $mentorName . ' telah selesai. Lanjutkan dengan bantu mahasiswa lainnya!',
             $sessionId,
             'session'
         );
