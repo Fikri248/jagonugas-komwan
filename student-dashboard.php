@@ -112,7 +112,7 @@ if ($pdo) {
     try { $stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status = 'ongoing'"); $stmt->execute([$userId]); $active_sessions = (int)$stmt->fetchColumn(); } catch (Throwable $e) {}
     try { $stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status = 'pending'"); $stmt->execute([$userId]); $pending_sessions = (int)$stmt->fetchColumn(); } catch (Throwable $e) {}
     try { $stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status = 'completed'"); $stmt->execute([$userId]); $completed_sessions = (int)$stmt->fetchColumn(); } catch (Throwable $e) {}
-    try { $stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions s LEFT JOIN mentor_reviews mr ON s.id = mr.session_id WHERE s.student_id = ? AND s.status = 'completed' AND mr.id IS NULL"); $stmt->execute([$userId]); $need_rating = (int)$stmt->fetchColumn(); } catch (Throwable $e) {}
+    try { $stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions WHERE student_id = ? AND status = 'completed' AND rating IS NULL"); $stmt->execute([$userId]); $need_rating = (int)$stmt->fetchColumn(); } catch (Throwable $e) {}
 }
 
 // My Questions - MAX 2 CARDS
