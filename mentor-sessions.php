@@ -30,10 +30,11 @@ $stmt = $pdo->prepare("
            c.id AS conversation_id
     FROM sessions s
     JOIN users u ON s.student_id = u.id
-    LEFT JOIN conversations c ON c.student_id = s.student_id AND c.mentor_id = s.mentor_id
+    LEFT JOIN conversations c ON c.session_id = s.id
     WHERE s.mentor_id = ?
     ORDER BY s.created_at DESC
 ");
+
 $stmt->execute([$mentor_id]);
 $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -551,6 +552,45 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
             font-weight: 600;
             color: #92400e;
         }
+
+        /* Review Display */
+.review-display {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.review-display i {
+    color: #16a34a;
+    font-size: 1rem;
+    margin-top: 2px;
+}
+
+.review-display .review-content {
+    flex: 1;
+}
+
+.review-display .review-label {
+    font-size: 0.75rem;
+    color: #15803d;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.review-display .review-text {
+    font-size: 0.9rem;
+    color: #166534;
+    line-height: 1.5;
+    font-style: italic;
+}
+
 
         /* ===== EMPTY STATE ===== */
         .empty-state {
@@ -1170,17 +1210,6 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                                 </button>
                             <?php endif; ?>
 
-                            <?php if ($session['status'] === 'ongoing'): ?>
-                                <form method="POST" action="<?= $BASE ?>/mentor-session-action.php" style="display:inline;"
-                                      onsubmit="return confirm('Tandai sesi sebagai selesai?');">
-                                    <input type="hidden" name="session_id" value="<?= $session['id'] ?>">
-                                    <input type="hidden" name="action" value="complete">
-                                    <button type="submit" class="btn btn-complete">
-                                        <i class="bi bi-check2-square"></i> Selesaikan
-                                    </button>
-                                </form>
-                            <?php endif; ?>
-
                             <?php if ($session['rating']): ?>
                                 <div class="rating-display">
                                     <div class="stars">
@@ -1191,6 +1220,16 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                                     <span class="rating-text"><?= $session['rating'] ?>/5</span>
                                 </div>
                             <?php endif; ?>
+                            <?php if (!empty($session['review'])): ?>
+    <div class="review-display">
+        <i class="bi bi-chat-left-quote"></i>
+        <div class="review-content">
+            <div class="review-label">Review dari Mahasiswa</div>
+            <div class="review-text"><?= htmlspecialchars($session['review']) ?></div>
+        </div>
+    </div>
+<?php endif; ?>
+
                         </div>
                     </div>
                 </div>
@@ -1522,6 +1561,184 @@ document.addEventListener('keydown', (e) => {
     }
 });
 </script>
+<!-- REAL-TIME POLLING - FIXED VERSION -->
+<script>
+(function() {
+    let lastCheck = '<?php echo date('Y-m-d H:i:s'); ?>';
+    const POLL_INTERVAL = 5000; // 5 detik
+    let isPolling = false;
+    
+    function pollNewBookings() {
+        if (isPolling) return;
+        isPolling = true;
+        
+        fetch('<?php echo BASE_PATH; ?>/check-session-status.php?lastcheck=' + encodeURIComponent(lastCheck))
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Update lastCheck ke server time
+                    lastCheck = data.server_time;
+                    
+                    // Update stats badges
+                    updateStats(data.stats);
+                    
+                    // Cek ada booking baru pending
+                    if (data.updates && data.updates.length > 0) {
+                        const newPending = data.updates.filter(u => u.status === 'pending');
+                        if (newPending.length > 0) {
+                            showNewBookingNotification(newPending);
+                        }
+                    }
+                }
+            })
+            .catch(err => console.log('Poll error:', err))
+            .finally(() => {
+                isPolling = false;
+                setTimeout(pollNewBookings, POLL_INTERVAL);
+            });
+    }
+    
+    function showNewBookingNotification(updates) {
+        updates.forEach(u => {
+            showToast(
+                '🔔 Booking Baru!', 
+                `${u.student_name} memesan sesi ${u.duration} menit`, 
+                'success'
+            );
+        });
+        
+        // Tambahkan badge/indicator di halaman
+        document.title = `(${updates.length}) Booking Baru - JagoNugas`;
+        
+        // Play notification sound
+        playNotificationSound();
+        
+        // Auto reload setelah 1.5 detik
+        setTimeout(() => {
+            location.reload();
+        }, 1500);
+    }
+    
+    function updateStats(stats) {
+        const pendingNum = document.querySelector('.stat-icon.pending')?.parentElement?.querySelector('.stat-number');
+        const ongoingNum = document.querySelector('.stat-icon.ongoing')?.parentElement?.querySelector('.stat-number');
+        const completedNum = document.querySelector('.stat-icon.completed')?.parentElement?.querySelector('.stat-number');
+        const cancelledNum = document.querySelector('.stat-icon.cancelled')?.parentElement?.querySelector('.stat-number');
+        
+        if (pendingNum) pendingNum.textContent = stats.pending || 0;
+        if (ongoingNum) ongoingNum.textContent = stats.ongoing || 0;
+        if (completedNum) completedNum.textContent = stats.completed || 0;
+        if (cancelledNum) cancelledNum.textContent = stats.cancelled || 0;
+    }
+    
+    function showToast(title, message, type = 'info') {
+        // Hapus toast lama
+        document.querySelectorAll('.realtime-toast').forEach(t => t.remove());
+        
+        const toast = document.createElement('div');
+        toast.className = 'realtime-toast ' + type;
+        toast.innerHTML = `
+            <i class="bi bi-bell-fill"></i>
+            <div class="toast-content">
+                <strong>${title}</strong>
+                <p>${message}</p>
+            </div>
+            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.2rem;">×</button>
+        `;
+        document.body.appendChild(toast);
+        
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // Auto hide after 8 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 8000);
+    }
+    
+    function playNotificationSound() {
+        try {
+            // Simple beep sound
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.1;
+            
+            oscillator.start();
+            setTimeout(() => oscillator.stop(), 200);
+        } catch(e) {
+            console.log('Audio not supported');
+        }
+    }
+    
+    // Start polling after page load
+    setTimeout(pollNewBookings, POLL_INTERVAL);
+    
+    // Also poll on tab focus (user kembali ke tab)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            pollNewBookings();
+        }
+    });
+})();
+</script>
+
+<style>
+.realtime-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: white;
+    padding: 16px 20px;
+    border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 99999;
+    transform: translateX(calc(100% + 30px));
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 380px;
+    border-left: 4px solid #10b981;
+}
+.realtime-toast.show { 
+    transform: translateX(0); 
+}
+.realtime-toast.success { border-left-color: #10b981; }
+.realtime-toast.success i { color: #10b981; font-size: 1.5rem; }
+.realtime-toast.error { border-left-color: #ef4444; }
+.realtime-toast.error i { color: #ef4444; font-size: 1.5rem; }
+.realtime-toast .toast-content { flex: 1; }
+.realtime-toast .toast-content strong { 
+    display: block; 
+    color: #0f172a; 
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+.realtime-toast .toast-content p { 
+    margin: 0; 
+    color: #64748b; 
+    font-size: 0.85rem; 
+}
+
+@media (max-width: 500px) {
+    .realtime-toast {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        max-width: none;
+    }
+}
+</style>
 
 </body>
 </html>
