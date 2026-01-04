@@ -1,0 +1,1447 @@
+<?php
+// api-chat-messages.php - Polling untuk pesan baru + deteksi edited/deleted messages
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+$role = $_SESSION['role'];
+
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error']);
+    exit;
+}
+
+$conversation_id = (int)($_GET['conversation_id'] ?? 0);
+$last_id = (int)($_GET['last_id'] ?? 0);
+$include_updated = isset($_GET['include_updated']) && $_GET['include_updated'] == '1';
+
+if (!$conversation_id) {
+    echo json_encode(['success' => false, 'error' => 'Invalid conversation']);
+    exit;
+}
+
+// Verify conversation access
+$stmt = $pdo->prepare("
+    SELECT * FROM conversations 
+    WHERE id = ? AND (student_id = ? OR mentor_id = ?)
+");
+$stmt->execute([$conversation_id, $user_id, $user_id]);
+
+if (!$stmt->fetch()) {
+    echo json_encode(['success' => false, 'error' => 'Access denied']);
+    exit;
+}
+
+// Get ALL existing message IDs for delete detection
+$stmt = $pdo->prepare("SELECT id FROM messages WHERE conversation_id = ?");
+$stmt->execute([$conversation_id]);
+$existingIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+// Get new/updated messages
+if ($include_updated) {
+    // Get new messages AND recently edited messages (within last 30 seconds)
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.name AS sender_name
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.conversation_id = ?
+        AND (
+            m.id > ?
+            OR (m.edited_at IS NOT NULL AND m.edited_at > DATE_SUB(NOW(), INTERVAL 30 SECOND))
+        )
+        ORDER BY m.created_at ASC
+    ");
+    $stmt->execute([$conversation_id, $last_id]);
+} else {
+    // Just new messages
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.name AS sender_name
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.conversation_id = ?
+        AND m.id > ?
+        ORDER BY m.created_at ASC
+    ");
+    $stmt->execute([$conversation_id, $last_id]);
+}
+
+$messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Mark as read (only messages from other party)
+if (!empty($messages)) {
+    $stmt = $pdo->prepare("
+        UPDATE messages SET is_read = 1 
+        WHERE conversation_id = ? AND sender_id != ? AND is_read = 0
+    ");
+    $stmt->execute([$conversation_id, $user_id]);
+}
+
+// Format messages
+$formatted = [];
+$maxId = $last_id;
+
+foreach ($messages as $msg) {
+    $msgId = (int)$msg['id'];
+    if ($msgId > $maxId) {
+        $maxId = $msgId;
+    }
+    
+    $formatted[] = [
+        'id' => $msgId,
+        'sender_id' => (int)$msg['sender_id'],
+        'sender_name' => $msg['sender_name'],
+        'message' => $msg['message'] ?? '',
+        'file_name' => $msg['file_name'] ?? null,
+        'file_path' => $msg['file_path'] ?? null,
+        'file_size' => isset($msg['file_size']) ? (int)$msg['file_size'] : null,
+        'time' => date('H:i', strtotime($msg['created_at'])),
+        'created_at' => $msg['created_at'],
+        'edited_at' => $msg['edited_at'] ?? null,
+        'is_edited' => !empty($msg['edited_at']),
+        'is_mine' => ((int)$msg['sender_id'] === $user_id)
+    ];
+}
+
+echo json_encode([
+    'success' => true,
+    'messages' => $formatted,
+    'last_id' => $maxId,
+    'user_id' => $user_id,
+    'existing_ids' => array_map('intval', $existingIds)
+]);
+
+<?php
+// session-rating.php - Rating sesi setelah selesai
+// INLINE CSS (tanpa import style.css) + INCLUDE student-navbar.php
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/NotificationHelper.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
+    header('Location: ' . BASE_PATH . '/login.php');
+    exit;
+}
+
+$student_id = $_SESSION['user_id'];
+
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    die('Database connection failed.');
+}
+
+$notif = new NotificationHelper($pdo);
+
+// Ambil session_id dari GET / POST
+$session_id = (int)($_GET['session_id'] ?? $_POST['session_id'] ?? 0);
+if (!$session_id) {
+    NotificationHelper::setError('Sesi tidak valid.');
+    header('Location: ' . BASE_PATH . '/student-sessions.php');
+    exit;
+}
+
+// Ambil data sesi
+$stmt = $pdo->prepare("
+    SELECT s.*, u.name AS mentor_name, u.avatar AS mentor_avatar
+    FROM sessions s
+    JOIN users u ON s.mentor_id = u.id
+    WHERE s.id = ? AND s.student_id = ?
+");
+$stmt->execute([$session_id, $student_id]);
+$session = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$session) {
+    NotificationHelper::setError('Sesi tidak ditemukan.');
+    header('Location: ' . BASE_PATH . '/student-sessions.php');
+    exit;
+}
+
+if ($session['status'] !== 'completed') {
+    NotificationHelper::setError('Sesi ini belum selesai, tidak bisa diberi rating.');
+    header('Location: ' . BASE_PATH . '/student-sessions.php');
+    exit;
+}
+
+if (!empty($session['rating'])) {
+    NotificationHelper::setError('Sesi ini sudah memiliki rating.');
+    header('Location: ' . BASE_PATH . '/student-sessions.php');
+    exit;
+}
+
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rating = (int)($_POST['rating'] ?? 0);
+    $review = trim($_POST['review'] ?? '');
+
+    if ($rating < 1 || $rating > 5) {
+        $errors[] = 'Pilih rating antara 1 sampai 5 bintang.';
+    }
+
+    if (strlen($review) < 5) {
+        $errors[] = 'Review minimal 5 karakter.';
+    }
+
+    if (empty($errors)) {
+        try {
+            $pdo->beginTransaction();
+
+            // Simpan rating & review
+            $stmt = $pdo->prepare("UPDATE sessions SET rating = ?, review = ? WHERE id = ?");
+            $stmt->execute([$rating, $review, $session_id]);
+
+            // Update aggregate rating mentor
+            $stmt = $pdo->prepare("
+                UPDATE users
+                SET total_rating = total_rating + ?,
+                    review_count = review_count + 1
+                WHERE id = ?
+            ");
+            $stmt->execute([$rating, $session['mentor_id']]);
+
+            // Notifikasi ke mentor
+            $studentName = $_SESSION['name'] ?? 'Mahasiswa';
+            $notif->bookingCompleted($session['mentor_id'], $studentName, $session_id);
+
+            $pdo->commit();
+
+            NotificationHelper::setSuccess('Terima kasih! Rating dan review berhasil dikirim.');
+            header('Location: ' . BASE_PATH . '/student-sessions.php');
+            exit;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $errors[] = 'Terjadi kesalahan saat menyimpan rating.';
+        }
+    }
+}
+
+// Helper untuk avatar
+if (!function_exists('get_avatar_url')) {
+    function get_avatar_url($avatar, $base = '') {
+        if (empty($avatar)) return '';
+        if (filter_var($avatar, FILTER_VALIDATE_URL)) return $avatar;
+        return $base . '/' . ltrim($avatar, '/');
+    }
+}
+
+$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beri Rating Sesi - JagoNugas</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        /* ===== RESET & BASE ===== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a202c;
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+        .container { max-width: 1280px; margin: 0 auto; padding: 0 40px; }
+
+        /* ===== BUTTONS ===== */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 2px solid transparent;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        .btn-outline {
+            border: 2px solid #e2e8f0;
+            color: #4a5568;
+            background: transparent;
+        }
+        .btn-outline:hover {
+            border-color: #667eea;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        /* ===== ALERTS ===== */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        .alert-error {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        .alert-success {
+            background: #dcfce7;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        /* ===== RATING PAGE ===== */
+        .rating-page-container {
+            max-width: 640px;
+            margin: 2.5rem auto;
+            padding: 1.5rem;
+        }
+        .rating-card {
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 50px rgba(15,23,42,0.12);
+            border: 1px solid #e2e8f0;
+        }
+        .rating-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .rating-mentor-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.5rem;
+            color: #fff;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            box-shadow: 0 10px 24px rgba(102, 126, 234, 0.35);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .rating-mentor-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .rating-mentor-info { flex: 1; }
+        .rating-mentor-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px; }
+        .rating-mentor-name { font-size: 1.25rem; font-weight: 700; color: #1e293b; margin: 0 0 4px 0; }
+        .rating-session-date { font-size: 0.85rem; color: #64748b; }
+
+        /* Rating Stars */
+        .rating-section { margin-bottom: 1.5rem; }
+        .rating-label { font-weight: 600; font-size: 0.95rem; color: #1e293b; margin-bottom: 4px; }
+        .rating-hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; }
+        .rating-stars {
+            display: flex;
+            flex-direction: row-reverse;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .rating-stars input { display: none; }
+        .rating-stars label {
+            font-size: 2.5rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .rating-stars label:hover,
+        .rating-stars label:hover ~ label,
+        .rating-stars input:checked ~ label {
+            color: #fbbf24;
+            transform: scale(1.1);
+        }
+
+        /* Textarea */
+        .rating-textarea {
+            width: 100%;
+            min-height: 120px;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            padding: 14px 16px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: vertical;
+            outline: none;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+        .rating-textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+        .rating-textarea::placeholder { color: #94a3b8; }
+
+        /* Buttons */
+        .rating-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #f1f5f9;
+        }
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+            border-radius: 12px;
+            padding: 12px 24px;
+            border: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { background: #e2e8f0; color: #1e293b; }
+        .btn-primary-solid {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border-radius: 12px;
+            padding: 12px 28px;
+            border: none;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-primary-solid:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Error Box */
+        .rating-error {
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 0.9rem;
+            margin-bottom: 1.25rem;
+        }
+        .rating-error strong { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .rating-error ul { margin: 0; padding-left: 20px; }
+        .rating-error li { margin-bottom: 4px; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .rating-page-container { padding: 1rem; margin: 1rem auto; }
+            .rating-card { padding: 1.5rem; }
+            .rating-header { flex-direction: column; text-align: center; }
+            .rating-stars label { font-size: 2rem; }
+        }
+        @media (max-width: 480px) {
+            .rating-actions { flex-direction: column; }
+            .rating-actions a, .rating-actions button { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<?php include __DIR__ . '/student-navbar.php'; ?>
+
+<!-- ========== RATING CONTENT ========== -->
+<div class="rating-page-container">
+    <div class="rating-card">
+        <div class="rating-header">
+            <?php 
+            $mentorAvatarUrl = get_avatar_url($session['mentor_avatar'] ?? '', $BASE);
+            ?>
+            <div class="rating-mentor-avatar">
+                <?php if ($mentorAvatarUrl): ?>
+                    <img src="<?= htmlspecialchars($mentorAvatarUrl) ?>" alt="Mentor" referrerpolicy="no-referrer">
+                <?php else: ?>
+                    <?= strtoupper(substr($session['mentor_name'], 0, 1)) ?>
+                <?php endif; ?>
+            </div>
+            <div class="rating-mentor-info">
+                <div class="rating-mentor-label">Beri Rating untuk Mentor</div>
+                <h2 class="rating-mentor-name"><?= htmlspecialchars($session['mentor_name']) ?></h2>
+                <div class="rating-session-date">
+                    <i class="bi bi-calendar3"></i>
+                    Sesi tanggal <?= date('d M Y, H:i', strtotime($session['created_at'])) ?> WIB
+                </div>
+            </div>
+        </div>
+
+        <?php if (!empty($errors)): ?>
+            <div class="rating-error">
+                <strong><i class="bi bi-exclamation-triangle"></i> Terjadi kesalahan:</strong>
+                <ul>
+                    <?php foreach ($errors as $err): ?>
+                        <li><?= htmlspecialchars($err) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST">
+            <input type="hidden" name="session_id" value="<?= $session_id ?>">
+
+            <div class="rating-section">
+                <div class="rating-label">Pilih Rating</div>
+                <div class="rating-hint">1 = sangat buruk, 5 = sangat puas</div>
+                <div class="rating-stars">
+                    <?php for ($i = 5; $i >= 1; $i--): ?>
+                        <input type="radio" id="star<?= $i ?>" name="rating" value="<?= $i ?>">
+                        <label for="star<?= $i ?>"><i class="bi bi-star-fill"></i></label>
+                    <?php endfor; ?>
+                </div>
+            </div>
+
+            <div class="rating-section">
+                <label for="review" class="rating-label">Tulis Review</label>
+                <div class="rating-hint">Ceritakan pengalamanmu dengan sesi mentoring ini</div>
+                <textarea id="review" name="review" class="rating-textarea" placeholder="Bagaimana pengalaman belajarmu dengan mentor ini? Apa yang paling membantu?"></textarea>
+            </div>
+
+            <div class="rating-actions">
+                <a href="<?= BASE_PATH ?>/student-sessions.php" class="btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Batal
+                </a>
+                <button type="submit" class="btn-primary-solid">
+                    <i class="bi bi-send"></i> Kirim Rating
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>
+
+<?php
+// mentor-chat-send.php v1.1 - FIXED
+// Fix: Bisa kirim file tanpa teks (handle NULL message properly)
+
+// Set PHP limits for large file upload
+@ini_set('upload_max_filesize', '300M');
+@ini_set('post_max_size', '310M');
+@ini_set('max_execution_time', '600');
+@ini_set('max_input_time', '600');
+@ini_set('memory_limit', '512M');
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'mentor') {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$mentor_id = $_SESSION['user_id'];
+
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error']);
+    exit;
+}
+
+// Validate input
+$conversation_id = (int)($_POST['conversation_id'] ?? 0);
+$message = trim($_POST['message'] ?? '');
+$edit_message_id = (int)($_POST['edit_message_id'] ?? 0);
+
+if (!$conversation_id) {
+    echo json_encode(['success' => false, 'error' => 'Invalid conversation']);
+    exit;
+}
+
+// Verify conversation belongs to mentor
+$stmt = $pdo->prepare("SELECT * FROM conversations WHERE id = ? AND mentor_id = ?");
+$stmt->execute([$conversation_id, $mentor_id]);
+$conv = $stmt->fetch();
+
+if (!$conv) {
+    echo json_encode(['success' => false, 'error' => 'Conversation not found']);
+    exit;
+}
+
+// ========================================
+// MODE EDIT: Update existing message
+// ========================================
+if ($edit_message_id > 0) {
+    // Verify message belongs to this user and conversation
+    $stmt = $pdo->prepare("
+        SELECT * FROM messages 
+        WHERE id = ? AND conversation_id = ? AND sender_id = ?
+    ");
+    $stmt->execute([$edit_message_id, $conversation_id, $mentor_id]);
+    $existingMsg = $stmt->fetch();
+    
+    if (!$existingMsg) {
+        echo json_encode(['success' => false, 'error' => 'Pesan tidak ditemukan atau bukan milik Anda']);
+        exit;
+    }
+    
+    if (empty($message)) {
+        echo json_encode(['success' => false, 'error' => 'Pesan tidak boleh kosong']);
+        exit;
+    }
+    
+    try {
+        // UPDATE existing message + set edited_at
+        $stmt = $pdo->prepare("
+            UPDATE messages 
+            SET message = ?, edited_at = NOW() 
+            WHERE id = ? AND sender_id = ?
+        ");
+        $stmt->execute([$message, $edit_message_id, $mentor_id]);
+        
+        // Update conversation timestamp
+        $stmt = $pdo->prepare("UPDATE conversations SET updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$conversation_id]);
+        
+        echo json_encode([
+            'success' => true,
+            'edited' => true,
+            'message' => [
+                'id' => $edit_message_id,
+                'message' => $message,
+                'file_name' => $existingMsg['file_name'] ?? null,
+                'file_path' => $existingMsg['file_path'] ?? null,
+                'file_size' => $existingMsg['file_size'] ?? null,
+                'time' => date('H:i', strtotime($existingMsg['created_at'])),
+                'edited_at' => date('Y-m-d H:i:s')
+            ]
+        ]);
+        exit;
+        
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => 'Gagal mengedit pesan: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+// ========================================
+// MODE NORMAL: Insert new message
+// ========================================
+
+// Handle file upload
+$file_name = null;
+$file_path = null;
+$file_type = null;
+$file_size = null;
+$hasFile = false;
+
+if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+    $file = $_FILES['attachment'];
+    
+    // Check if video
+    $isVideo = in_array($file['type'], ['video/mp4', 'video/webm', 'video/quicktime']);
+    
+    // Allowed types
+    $allowedTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'video/mp4', 'video/webm', 'video/quicktime'
+    ];
+    
+    // Max size: 300MB for video, 5MB for others
+    $maxSize = $isVideo ? 300 * 1024 * 1024 : 5 * 1024 * 1024;
+    
+    if (!in_array($file['type'], $allowedTypes)) {
+        echo json_encode(['success' => false, 'error' => 'Tipe file tidak diizinkan']);
+        exit;
+    }
+    
+    if ($file['size'] > $maxSize) {
+        $maxMB = $isVideo ? '300MB' : '5MB';
+        echo json_encode(['success' => false, 'error' => "File terlalu besar (maks $maxMB)"]);
+        exit;
+    }
+    
+    // Create upload directory
+    $uploadDir = __DIR__ . '/uploads/chat/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    
+    // Generate unique filename
+    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $newFileName = 'chat_' . $conversation_id . '_' . time() . '_' . uniqid() . '.' . $ext;
+    $uploadPath = $uploadDir . $newFileName;
+    
+    if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+        $file_name = $file['name'];
+        $file_path = 'uploads/chat/' . $newFileName;
+        $file_type = $file['type'];
+        $file_size = $file['size'];
+        $hasFile = true;
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Gagal upload file']);
+        exit;
+    }
+}
+
+// FIX: Validasi - butuh minimal salah satu: message ATAU file
+$hasMessage = !empty($message);
+
+if (!$hasMessage && !$hasFile) {
+    echo json_encode(['success' => false, 'error' => 'Tulis pesan atau pilih file untuk dikirim']);
+    exit;
+}
+
+try {
+    // FIX: Jika hanya file tanpa teks, set message ke empty string (bukan NULL)
+    // Ini untuk handle database yang mungkin punya constraint NOT NULL
+    $messageToSave = $hasMessage ? $message : '';
+    
+    // Insert message
+    $stmt = $pdo->prepare("
+        INSERT INTO messages (conversation_id, sender_id, message, file_name, file_path, file_type, file_size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    ");
+    
+    $result = $stmt->execute([
+        $conversation_id,
+        $mentor_id,
+        $messageToSave,
+        $file_name,
+        $file_path,
+        $file_type,
+        $file_size
+    ]);
+    
+    if (!$result) {
+        throw new Exception('Execute failed: ' . implode(', ', $stmt->errorInfo()));
+    }
+    
+    $msgId = $pdo->lastInsertId();
+    
+    if (!$msgId) {
+        throw new Exception('Failed to get last insert ID');
+    }
+    
+    // Update conversation timestamp
+    $stmt = $pdo->prepare("UPDATE conversations SET updated_at = NOW() WHERE id = ?");
+    $stmt->execute([$conversation_id]);
+    
+    echo json_encode([
+        'success' => true,
+        'edited' => false,
+        'message' => [
+            'id' => $msgId,
+            'message' => $messageToSave,
+            'file_name' => $file_name,
+            'file_path' => $file_path,
+            'file_size' => $file_size,
+            'time' => date('H:i'),
+            'edited_at' => null
+        ]
+    ]);
+    
+} catch (Exception $e) {
+    // Cleanup file if DB failed
+    if ($file_path && file_exists(__DIR__ . '/' . $file_path)) {
+        @unlink(__DIR__ . '/' . $file_path);
+    }
+    
+    // FIX: Return detailed error untuk debugging
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Gagal menyimpan pesan',
+        'debug' => $e->getMessage() // Hapus ini di production
+    ]);
+}
+
+<?php
+// student-chat-send.php v1.1 - FIXED
+// Fix: Bisa kirim file tanpa teks (handle NULL message properly)
+
+// Set PHP limits for large file upload
+ini_set('upload_max_filesize', '300M');
+ini_set('post_max_size', '310M');
+ini_set('max_execution_time', 600);
+ini_set('max_input_time', 600);
+ini_set('memory_limit', '512M');
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$student_id = $_SESSION['user_id'];
+
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error']);
+    exit;
+}
+
+// Validate input
+$conversation_id = (int)($_POST['conversation_id'] ?? 0);
+$message = trim($_POST['message'] ?? '');
+$edit_message_id = (int)($_POST['edit_message_id'] ?? 0);
+
+if (!$conversation_id) {
+    echo json_encode(['success' => false, 'error' => 'Invalid conversation']);
+    exit;
+}
+
+// Verify conversation belongs to student
+$stmt = $pdo->prepare("SELECT * FROM conversations WHERE id = ? AND student_id = ?");
+$stmt->execute([$conversation_id, $student_id]);
+$conv = $stmt->fetch();
+
+if (!$conv) {
+    echo json_encode(['success' => false, 'error' => 'Conversation not found']);
+    exit;
+}
+
+// ========================================
+// MODE EDIT: Update existing message
+// ========================================
+if ($edit_message_id > 0) {
+    // Verify message belongs to this user and conversation
+    $stmt = $pdo->prepare("
+        SELECT * FROM messages 
+        WHERE id = ? AND conversation_id = ? AND sender_id = ?
+    ");
+    $stmt->execute([$edit_message_id, $conversation_id, $student_id]);
+    $existingMsg = $stmt->fetch();
+    
+    if (!$existingMsg) {
+        echo json_encode(['success' => false, 'error' => 'Pesan tidak ditemukan atau bukan milik Anda']);
+        exit;
+    }
+    
+    if (empty($message)) {
+        echo json_encode(['success' => false, 'error' => 'Pesan tidak boleh kosong']);
+        exit;
+    }
+    
+    try {
+        // UPDATE existing message + set edited_at
+        $stmt = $pdo->prepare("
+            UPDATE messages 
+            SET message = ?, edited_at = NOW() 
+            WHERE id = ? AND sender_id = ?
+        ");
+        $stmt->execute([$message, $edit_message_id, $student_id]);
+        
+        // Update conversation timestamp
+        $stmt = $pdo->prepare("UPDATE conversations SET updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$conversation_id]);
+        
+        echo json_encode([
+            'success' => true,
+            'edited' => true,
+            'message' => [
+                'id' => $edit_message_id,
+                'message' => $message,
+                'file_name' => $existingMsg['file_name'] ?? null,
+                'file_path' => $existingMsg['file_path'] ?? null,
+                'file_size' => $existingMsg['file_size'] ?? null,
+                'time' => date('H:i', strtotime($existingMsg['created_at'])),
+                'edited_at' => date('Y-m-d H:i:s')
+            ]
+        ]);
+        exit;
+        
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => 'Gagal mengedit pesan: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+// ========================================
+// MODE NORMAL: Insert new message
+// ========================================
+
+// Handle file upload
+$file_name = null;
+$file_path = null;
+$file_type = null;
+$file_size = null;
+$hasFile = false;
+
+if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+    $file = $_FILES['attachment'];
+    
+    // Check if video
+    $isVideo = in_array($file['type'], ['video/mp4', 'video/webm', 'video/quicktime']);
+    
+    // Allowed types (expanded)
+    $allowedTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'video/mp4', 'video/webm', 'video/quicktime'
+    ];
+    
+    // Max size: 300MB for video, 5MB for others
+    $maxSize = $isVideo ? 300 * 1024 * 1024 : 5 * 1024 * 1024;
+    
+    if (!in_array($file['type'], $allowedTypes)) {
+        echo json_encode(['success' => false, 'error' => 'Tipe file tidak diizinkan']);
+        exit;
+    }
+    
+    if ($file['size'] > $maxSize) {
+        $maxMB = $isVideo ? '300MB' : '5MB';
+        echo json_encode(['success' => false, 'error' => "File terlalu besar (maks $maxMB)"]);
+        exit;
+    }
+    
+    // Create upload directory
+    $uploadDir = __DIR__ . '/uploads/chat/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    
+    // Generate unique filename
+    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $newFileName = 'chat_' . $conversation_id . '_' . time() . '_' . uniqid() . '.' . $ext;
+    $uploadPath = $uploadDir . $newFileName;
+    
+    if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+        $file_name = $file['name'];
+        $file_path = 'uploads/chat/' . $newFileName;
+        $file_type = $file['type'];
+        $file_size = $file['size'];
+        $hasFile = true;
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Gagal upload file']);
+        exit;
+    }
+}
+
+// FIX: Validasi - butuh minimal salah satu (message ATAU file)
+$hasMessage = !empty($message);
+
+if (!$hasMessage && !$hasFile) {
+    echo json_encode(['success' => false, 'error' => 'Tulis pesan atau pilih file untuk dikirim']);
+    exit;
+}
+
+try {
+    // FIX: Jika hanya file tanpa teks, set message ke empty string (bukan NULL)
+    // Ini untuk handle database yang mungkin punya constraint NOT NULL
+    $messageToSave = $hasMessage ? $message : '';
+    
+    // Insert message
+    $stmt = $pdo->prepare("
+        INSERT INTO messages (conversation_id, sender_id, message, file_name, file_path, file_type, file_size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    ");
+    $result = $stmt->execute([
+        $conversation_id,
+        $student_id,
+        $messageToSave,
+        $file_name,
+        $file_path,
+        $file_type,
+        $file_size
+    ]);
+    
+    if (!$result) {
+        throw new Exception("Execute failed: " . implode(", ", $stmt->errorInfo()));
+    }
+    
+    $msgId = $pdo->lastInsertId();
+    
+    if (!$msgId) {
+        throw new Exception("Failed to get last insert ID");
+    }
+    
+    // Update conversation timestamp
+    $stmt = $pdo->prepare("UPDATE conversations SET updated_at = NOW() WHERE id = ?");
+    $stmt->execute([$conversation_id]);
+    
+    echo json_encode([
+        'success' => true,
+        'edited' => false,
+        'message' => [
+            'id' => $msgId,
+            'message' => $messageToSave,
+            'file_name' => $file_name,
+            'file_path' => $file_path,
+            'file_size' => $file_size,
+            'time' => date('H:i'),
+            'edited_at' => null
+        ]
+    ]);
+    
+} catch (Exception $e) {
+    // Cleanup file if DB failed
+    if ($file_path && file_exists(__DIR__ . '/' . $file_path)) {
+        unlink(__DIR__ . '/' . $file_path);
+    }
+    
+    // FIX: Return detailed error untuk debugging
+    echo json_encode([
+        'success' => false,
+        'error' => 'Gagal menyimpan pesan',
+        'debug' => $e->getMessage()  // Hapus ini di production
+    ]);
+}
+
+<?php
+// api-typing-status.php - Handle typing indicator
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+
+try {
+    $pdo = (new Database())->getConnection();
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error']);
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'];
+
+// ============================================
+// === GET: Check if other party is typing ===
+// ============================================
+if ($method === 'GET') {
+    $conversation_id = (int)($_GET['conversation_id'] ?? 0);
+    
+    if (!$conversation_id) {
+        echo json_encode(['success' => false, 'error' => 'Missing conversation_id']);
+        exit;
+    }
+    
+    // Verify user has access to conversation
+    $stmt = $pdo->prepare("SELECT student_id, mentor_id FROM conversations WHERE id = ?");
+    $stmt->execute([$conversation_id]);
+    $conv = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$conv || ($conv['student_id'] != $user_id && $conv['mentor_id'] != $user_id)) {
+        echo json_encode(['success' => false, 'error' => 'Access denied']);
+        exit;
+    }
+    
+    // Determine other party's user_id
+    $other_user_id = ($user_id == $conv['student_id']) ? $conv['mentor_id'] : $conv['student_id'];
+    
+    // Get other party's typing status (only if updated within last 5 seconds)
+    $stmt = $pdo->prepare("
+        SELECT ts.is_typing, u.name AS typer_name
+        FROM typing_status ts
+        JOIN users u ON ts.user_id = u.id
+        WHERE ts.conversation_id = ? 
+          AND ts.user_id = ? 
+          AND ts.is_typing = 1
+          AND ts.updated_at > DATE_SUB(NOW(), INTERVAL 5 SECOND)
+    ");
+    $stmt->execute([$conversation_id, $other_user_id]);
+    $typing = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    echo json_encode([
+        'success' => true,
+        'is_typing' => (bool)$typing,
+        'typer_name' => $typing['typer_name'] ?? null
+    ]);
+    exit;
+}
+
+// ============================================
+// === POST: Set typing status ===
+// ============================================
+if ($method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $conversation_id = (int)($input['conversation_id'] ?? 0);
+    $is_typing = (bool)($input['is_typing'] ?? false);
+    
+    if (!$conversation_id) {
+        echo json_encode(['success' => false, 'error' => 'Missing conversation_id']);
+        exit;
+    }
+    
+    // Verify user has access to conversation
+    $stmt = $pdo->prepare("SELECT student_id, mentor_id FROM conversations WHERE id = ?");
+    $stmt->execute([$conversation_id]);
+    $conv = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$conv || ($conv['student_id'] != $user_id && $conv['mentor_id'] != $user_id)) {
+        echo json_encode(['success' => false, 'error' => 'Access denied']);
+        exit;
+    }
+    
+    // Upsert typing status (INSERT or UPDATE if exists)
+    $stmt = $pdo->prepare("
+        INSERT INTO typing_status (conversation_id, user_id, is_typing, updated_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE 
+            is_typing = VALUES(is_typing), 
+            updated_at = NOW()
+    ");
+    $stmt->execute([$conversation_id, $user_id, $is_typing ? 1 : 0]);
+    
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+// ============================================
+// === Invalid method ===
+// ============================================
+echo json_encode(['success' => false, 'error' => 'Invalid method']);
+
+<?php
+// api-message-delete.php - Hapus pesan chat
+header('Content-Type: application/json');
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Cek login
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'] ?? '';
+
+// Ambil input JSON
+$input = json_decode(file_get_contents('php://input'), true);
+$message_id = isset($input['message_id']) ? (int)$input['message_id'] : 0;
+
+if (!$message_id) {
+    echo json_encode(['success' => false, 'error' => 'Message ID required']);
+    exit;
+}
+
+try {
+    $pdo = (new Database())->getConnection();
+    
+    // Cek kepemilikan pesan - hanya sender yang bisa hapus
+    $stmt = $pdo->prepare("
+        SELECT m.*, c.student_id, c.mentor_id 
+        FROM messages m
+        JOIN conversations c ON m.conversation_id = c.id
+        WHERE m.id = ?
+    ");
+    $stmt->execute([$message_id]);
+    $message = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$message) {
+        echo json_encode(['success' => false, 'error' => 'Pesan tidak ditemukan']);
+        exit;
+    }
+    
+    // Validasi: hanya sender yang bisa hapus pesannya sendiri
+    if ($message['sender_id'] != $user_id) {
+        echo json_encode(['success' => false, 'error' => 'Tidak diizinkan menghapus pesan ini']);
+        exit;
+    }
+    
+    // Validasi: user harus bagian dari conversation
+    $isParticipant = ($user_role === 'student' && $message['student_id'] == $user_id) ||
+                     ($user_role === 'mentor' && $message['mentor_id'] == $user_id);
+    
+    if (!$isParticipant) {
+        echo json_encode(['success' => false, 'error' => 'Akses ditolak']);
+        exit;
+    }
+    
+    // Hapus file attachment jika ada
+    if (!empty($message['file_path'])) {
+        $filePath = __DIR__ . '/' . $message['file_path'];
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+    }
+    
+    // Hapus pesan dari database
+    $stmt = $pdo->prepare("DELETE FROM messages WHERE id = ?");
+    $stmt->execute([$message_id]);
+    
+    echo json_encode(['success' => true]);
+    
+} catch (Exception $e) {
+    error_log('Delete message error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'error' => 'Gagal menghapus pesan']);
+}
+
+<?php
+// api-session-end.php v1.1 - API untuk mengakhiri sesi (auto-end saat timer 00:00)
+// Bisa dipanggil oleh student ATAU mentor
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Harus login (bisa student atau mentor)
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$userId = $_SESSION['user_id'];
+$userRole = $_SESSION['role'] ?? '';
+
+// Get JSON input
+$input = json_decode(file_get_contents('php://input'), true);
+$session_id = isset($input['session_id']) ? (int)$input['session_id'] : 0;
+
+if (!$session_id) {
+    echo json_encode(['success' => false, 'error' => 'Session ID diperlukan']);
+    exit;
+}
+
+try {
+    $pdo = (new Database())->getConnection();
+    
+    // Verify session belongs to this user (student OR mentor) and is ongoing
+    $stmt = $pdo->prepare("
+        SELECT id, mentor_id, student_id, status 
+        FROM sessions 
+        WHERE id = ? AND (student_id = ? OR mentor_id = ?)
+    ");
+    $stmt->execute([$session_id, $userId, $userId]);
+    $session = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$session) {
+        echo json_encode(['success' => false, 'error' => 'Sesi tidak ditemukan']);
+        exit;
+    }
+    
+    if ($session['status'] !== 'ongoing') {
+        // Sudah selesai, return success tapi kasih info
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Sesi sudah tidak aktif',
+            'already_ended' => true,
+            'session_id' => $session_id
+        ]);
+        exit;
+    }
+    
+    // Update session status to completed
+    $stmt = $pdo->prepare("
+        UPDATE sessions 
+        SET status = 'completed', 
+            ended_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ? AND status = 'ongoing'
+    ");
+    $result = $stmt->execute([$session_id]);
+    
+    if ($result && $stmt->rowCount() > 0) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Sesi berhasil diakhiri',
+            'session_id' => $session_id
+        ]);
+    } else {
+        // Mungkin race condition - session sudah di-end oleh pihak lain
+        echo json_encode([
+            'success' => true,
+            'message' => 'Sesi sudah diakhiri',
+            'already_ended' => true,
+            'session_id' => $session_id
+        ]);
+    }
+    
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
+}
+
+<?php
+// api-session-timer.php v1.1 - Get session timer info + auto-end
+// FIXED: Removed undefined sessionAutoEnded method
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+
+header('Content-Type: application/json');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$userId = $_SESSION['user_id'] ?? null;
+if (!$userId) {
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+$sessionId = (int)($_GET['session_id'] ?? 0);
+if (!$sessionId) {
+    echo json_encode(['success' => false, 'error' => 'Session ID required']);
+    exit;
+}
+
+try {
+    $pdo = (new Database())->getConnection();
+    
+    $stmt = $pdo->prepare("
+        SELECT s.id, s.duration, s.status, s.started_at, s.ended_at,
+               s.student_id, s.mentor_id, u.name as mentor_name
+        FROM sessions s
+        JOIN users u ON s.mentor_id = u.id
+        WHERE s.id = ? AND (s.student_id = ? OR s.mentor_id = ?)
+    ");
+    $stmt->execute([$sessionId, $userId, $userId]);
+    $session = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$session) {
+        echo json_encode(['success' => false, 'error' => 'Session not found']);
+        exit;
+    }
+    
+    // Kalau belum ongoing atau sudah selesai
+    if ($session['status'] !== 'ongoing' || $session['ended_at']) {
+        echo json_encode([
+            'success' => true,
+            'status' => $session['ended_at'] ? 'completed' : $session['status'],
+            'remaining_seconds' => 0,
+            'is_expired' => true
+        ]);
+        exit;
+    }
+    
+    // Kalau started_at belum diset (fallback untuk data lama)
+    if (empty($session['started_at'])) {
+        echo json_encode([
+            'success' => true,
+            'status' => 'ongoing',
+            'remaining_seconds' => $session['duration'] * 60,
+            'duration_seconds' => $session['duration'] * 60,
+            'is_expired' => false,
+            'warning_5min' => false,
+            'warning_1min' => false,
+            'no_timer' => true
+        ]);
+        exit;
+    }
+    
+    // Hitung remaining time
+    $tz = new DateTimeZone('Asia/Jakarta');
+    $startedAt = new DateTime($session['started_at'], $tz);
+    $now = new DateTime('now', $tz);
+    $durationSeconds = $session['duration'] * 60;
+    
+    $elapsedSeconds = $now->getTimestamp() - $startedAt->getTimestamp();
+    $remainingSeconds = max(0, $durationSeconds - $elapsedSeconds);
+    
+    $isExpired = $remainingSeconds <= 0;
+    
+    // Auto-end jika expired (langsung update DB, tanpa notifikasi dulu)
+    if ($isExpired && $session['status'] === 'ongoing') {
+        $stmt = $pdo->prepare("
+            UPDATE sessions 
+            SET status = 'completed', ended_at = NOW(), updated_at = NOW()
+            WHERE id = ? AND status = 'ongoing'
+        ");
+        $stmt->execute([$sessionId]);
+        
+        // Notifikasi opsional - cek dulu method ada atau tidak
+        // Kalau mau tambah notifikasi, pastikan method ini ada di NotificationHelper.php
+        /*
+        if (class_exists('NotificationHelper')) {
+            $notif = new NotificationHelper($pdo);
+            if (method_exists($notif, 'create')) {
+                $notif->create(
+                    $session['student_id'],
+                    'session_ended',
+                    'Sesi konsultasi dengan ' . $session['mentor_name'] . ' telah berakhir.',
+                    ['session_id' => $sessionId]
+                );
+            }
+        }
+        */
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'status' => $isExpired ? 'completed' : 'ongoing',
+        'remaining_seconds' => (int)$remainingSeconds,
+        'duration_seconds' => (int)$durationSeconds,
+        'elapsed_seconds' => (int)$elapsedSeconds,
+        'started_at' => $session['started_at'],
+        'is_expired' => $isExpired,
+        'warning_5min' => $remainingSeconds <= 300 && $remainingSeconds > 60,
+        'warning_1min' => $remainingSeconds <= 60 && $remainingSeconds > 0
+    ]);
+    
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);
+}
+

@@ -10,34 +10,28 @@ require_once __DIR__ . '/config.php';
  */
 function getRequestPath(string $basePath): string
 {
-    // Path tanpa query string (lebih aman daripada main str_replace ke full REQUEST_URI)
     $uriPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
-    // Normalisasi basePath
     $basePath = (string)$basePath;
     if ($basePath === '/') $basePath = '';
     $basePath = rtrim($basePath, '/');
 
-    // Kalau basePath ada dan request dimulai dengan basePath, buang prefix-nya
     if ($basePath !== '' && str_starts_with($uriPath, $basePath)) {
         $uriPath = substr($uriPath, strlen($basePath));
         if ($uriPath === false) $uriPath = '/';
     }
 
-    // Normalisasi path akhir
-    $uriPath = '/' . ltrim($uriPath, '/');    // pastikan diawali "/"
-    $uriPath = rtrim($uriPath, '/');          // buang trailing slash (kecuali root)
+    $uriPath = '/' . ltrim($uriPath, '/');
+    $uriPath = rtrim($uriPath, '/');
     if ($uriPath === '') $uriPath = '/';
 
-    // Jadi format final tanpa slash depan untuk routing switch (kecuali root jadi '')
     $route = trim($uriPath, '/');
 
-    // Proteksi simpel biar nggak ada path traversal aneh
     if (str_contains($route, '..')) {
         return '__invalid__';
     }
 
-    return $route; // contoh: '', 'login', 'forum/thread/12', 'admin/mentors'
+    return $route;
 }
 
 /**
@@ -59,7 +53,7 @@ function includeRouteFile(string $file): void
 
 $request = getRequestPath(BASE_PATH);
 
-// Optional: rapihin URL kalau ada /app.php atau /index.php di URL (kalau kejadian)
+// Optional: rapihin URL kalau ada /app.php atau /index.php di URL
 if ($request === 'app.php' || str_starts_with($request, 'app.php/')) {
     $new = str_replace('app.php', '', $request);
     $new = trim($new, '/');
@@ -91,7 +85,7 @@ $staticRoutes = [
     'sessions' => 'student-sessions.php',
     'gems' => 'student-gems-purchase.php',
     
-    // ===== STUDENT CHAT (NEW) =====
+    // ===== STUDENT CHAT =====
     'chat' => 'student-chat.php',
     'chat-history' => 'student-chat-history.php',
 
@@ -129,14 +123,16 @@ $staticRoutes = [
     'api/notifications/read' => 'api-notif-read.php',
     'api/notifications/read-all' => 'api-notif-read-all.php',
     
-    // ===== API - CHAT (NEW) =====
+    // ===== API - CHAT =====
     'api/chat/messages' => 'api-chat-messages.php',
     'api/chat/send' => 'student-chat-send.php',
     'api/message/delete' => 'api-message-delete.php',
     'api/typing-status' => 'api-typing-status.php',
     
-    // ===== API - SESSION (NEW) =====
+    // ===== API - SESSION =====
     'api/session/end' => 'api-session-end.php',
+    'api/session/timer' => 'api-session-timer.php',           // NEW
+    'api/session/check-status' => 'check-session-status.php', // NEW
 ];
 
 // Invalid path guard
@@ -166,7 +162,7 @@ if (preg_match('#^forum/thread/(\d+)$#', $request, $m) === 1) {
     includeRouteFile('student-forum-thread.php');
 }
 
-// ===== MENTOR FORUM THREAD (NEW) =====
+// ===== MENTOR FORUM THREAD =====
 if (preg_match('#^mentor/forum/thread/(\d+)$#', $request, $m) === 1) {
     $_GET['id'] = $m[1];
     includeRouteFile('mentor-forum-thread.php');

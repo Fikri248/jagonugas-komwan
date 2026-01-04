@@ -1,5 +1,6 @@
 <?php
-// api-session-end.php - API untuk mengakhiri sesi oleh mahasiswa
+// api-session-end.php v1.1 - API untuk mengakhiri sesi (auto-end saat timer 00:00)
+// Bisa dipanggil oleh student ATAU mentor
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
@@ -9,13 +10,14 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Hanya student yang bisa end session dari chat
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
+// Harus login (bisa student atau mentor)
+if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
-$student_id = $_SESSION['user_id'];
+$userId = $_SESSION['user_id'];
+$userRole = $_SESSION['role'] ?? '';
 
 // Get JSON input
 $input = json_decode(file_get_contents('php://input'), true);
@@ -29,13 +31,13 @@ if (!$session_id) {
 try {
     $pdo = (new Database())->getConnection();
     
-    // Verify session belongs to this student and is ongoing
+    // Verify session belongs to this user (student OR mentor) and is ongoing
     $stmt = $pdo->prepare("
-        SELECT id, mentor_id, status 
+        SELECT id, mentor_id, student_id, status 
         FROM sessions 
-        WHERE id = ? AND student_id = ?
+        WHERE id = ? AND (student_id = ? OR mentor_id = ?)
     ");
-    $stmt->execute([$session_id, $student_id]);
+    $stmt->execute([$session_id, $userId, $userId]);
     $session = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$session) {
@@ -44,7 +46,13 @@ try {
     }
     
     if ($session['status'] !== 'ongoing') {
-        echo json_encode(['success' => false, 'error' => 'Sesi tidak dalam status aktif']);
+        // Sudah selesai, return success tapi kasih info
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Sesi sudah tidak aktif',
+            'already_ended' => true,
+            'session_id' => $session_id
+        ]);
         exit;
     }
     
@@ -54,15 +62,25 @@ try {
         SET status = 'completed', 
             ended_at = NOW(),
             updated_at = NOW()
-        WHERE id = ?
+        WHERE id = ? AND status = 'ongoing'
     ");
-    $stmt->execute([$session_id]);
+    $result = $stmt->execute([$session_id]);
     
-    echo json_encode([
-        'success' => true,
-        'message' => 'Sesi berhasil diakhiri',
-        'session_id' => $session_id
-    ]);
+    if ($result && $stmt->rowCount() > 0) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Sesi berhasil diakhiri',
+            'session_id' => $session_id
+        ]);
+    } else {
+        // Mungkin race condition - session sudah di-end oleh pihak lain
+        echo json_encode([
+            'success' => true,
+            'message' => 'Sesi sudah diakhiri',
+            'already_ended' => true,
+            'session_id' => $session_id
+        ]);
+    }
     
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'error' => 'Database error: ' . $e->getMessage()]);

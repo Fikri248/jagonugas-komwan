@@ -1,5 +1,5 @@
 <?php
-// student-sessions.php - Halaman sesi konsultasi mahasiswa v2.4 - Proper Button Alignment
+// student-sessions.php - Halaman sesi konsultasi mahasiswa v2.5 - Fixed Layout
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
@@ -24,13 +24,15 @@ $stmt = $pdo->prepare("
            u.name AS mentor_name, 
            u.program_studi AS mentor_prodi,
            u.avatar AS mentor_avatar,
-           c.id AS conversation_id
+           (SELECT c.id FROM conversations c 
+            WHERE c.student_id = s.student_id AND c.mentor_id = s.mentor_id 
+            ORDER BY c.id DESC LIMIT 1) AS conversation_id
     FROM sessions s
     JOIN users u ON s.mentor_id = u.id
-    LEFT JOIN conversations c ON c.student_id = s.student_id AND c.mentor_id = s.mentor_id
     WHERE s.student_id = ?
     ORDER BY s.created_at DESC
 ");
+
 $stmt->execute([$student_id]);
 $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -403,7 +405,6 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
         .empty-state h2 { font-size: 1.25rem; color: #475569; margin-bottom: 0.5rem; font-weight: 600; }
         .empty-state p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 1.5rem; }
 
-        /* EMPTY STATE BUTTON - Compact, Professional & Properly Aligned */
         .btn-empty-cta {
             display: inline-flex;
             flex-direction: row;
@@ -711,7 +712,7 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                     $sessionNotes = $session['notes'] ?? '';
                     $rejectReason = $session['reject_reason'] ?? '';
                 ?>
-                <div class="session-card status-<?= $session['status'] ?>" data-status="<?= $session['status'] ?>">
+                <div class="session-card status-<?= $session['status'] ?>" data-status="<?= $session['status'] ?>" data-session-id="<?= $session['id'] ?>">
                     <div class="session-main">
                         <div class="session-top">
                             <div class="mentor-info">
@@ -770,9 +771,10 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                             </div>
                         <?php endif; ?>
 
+                        <!-- SESSION ACTIONS WRAPPER - INI YANG PENTING! -->
                         <div class="session-actions">
                             <?php if ($session['status'] === 'ongoing'): ?>
-                                <a href="<?= $BASE ?>/student-chat.php<?= $session['conversation_id'] ? '?conversation_id=' . $session['conversation_id'] : '' ?>" class="btn btn-chat">
+                                <a href="<?= $BASE ?>/student-chat.php?conversation_id=<?= $session['conversation_id'] ?>" class="btn btn-chat">
                                     <i class="bi bi-chat-dots-fill"></i>
                                     Chat Mentor
                                 </a>
@@ -803,6 +805,8 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                                 </div>
                             <?php endif; ?>
                         </div>
+                        <!-- END SESSION ACTIONS -->
+
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -878,6 +882,7 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
     </div>
 
     <script>
+        // Auto-hide alerts
         document.querySelectorAll('.alert').forEach(alert => {
             setTimeout(() => {
                 alert.style.transition = 'all 0.3s';
@@ -887,6 +892,7 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
             }, 5000);
         });
 
+        // Filter tabs
         const filterTabs = document.querySelectorAll('.filter-tab');
         const sessionList = document.getElementById('sessionList');
         const emptyFilterState = document.getElementById('emptyFilterState');
@@ -933,6 +939,7 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
             });
         });
 
+        // Cancel Modal
         const cancelModal = document.getElementById('cancelModal');
         const cancelSessionId = document.getElementById('cancelSessionId');
         const cancelModalMentorName = document.getElementById('cancelModalMentorName');
@@ -972,6 +979,48 @@ $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
                 closeCancelModal();
             }
         });
+
+        // Real-time polling for status updates
+        (function() {
+            let lastCheck = '<?php echo date('Y-m-d H:i:s'); ?>';
+            const POLL_INTERVAL = 5000;
+            let isPolling = false;
+            
+            function pollStatusUpdates() {
+                if (isPolling) return;
+                isPolling = true;
+                
+                fetch('<?php echo BASE_PATH; ?>/check-session-status.php?lastcheck=' + encodeURIComponent(lastCheck))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.updated && data.sessions) {
+                            data.sessions.forEach(session => {
+                                const card = document.querySelector(`[data-session-id="${session.id}"]`);
+                                if (card) {
+                                    // Update status class
+                                    card.className = card.className.replace(/status-\w+/, 'status-' + session.status);
+                                    card.dataset.status = session.status;
+                                    
+                                    // Update badge
+                                    const badge = card.querySelector('.status-badge');
+                                    if (badge) {
+                                        badge.className = 'status-badge ' + session.status;
+                                        const labels = {pending:'Menunggu',ongoing:'Berlangsung',completed:'Selesai',cancelled:'Dibatalkan'};
+                                        badge.textContent = labels[session.status] || session.status;
+                                    }
+                                }
+                            });
+                            lastCheck = data.timestamp || new Date().toISOString();
+                        }
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                        isPolling = false;
+                    });
+            }
+            
+            setInterval(pollStatusUpdates, POLL_INTERVAL);
+        })();
     </script>
 </body>
 </html>
