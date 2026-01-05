@@ -56,7 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password wajib diisi.';
     } else {
         try {
-            // ✅ Use $pdo from db.php instead of Database class
             $user = new User($pdo);
 
             $user->email    = $oldEmail;
@@ -69,13 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $u    = $loginResult['user'] ?? [];
                     $role = $u['role'] ?? 'student';
 
-                    // ✅ FIX: Check is_approved for mentors (not is_verified)
+                    // ✅ CHECK is_verified ONLY
                     if (
-                        $role === 'mentor'
-                        && array_key_exists('is_approved', $u)
-                        && !$u['is_approved']
+                        $role === 'mentor' &&
+                        array_key_exists('is_verified', $u) &&
+                        !$u['is_verified']
                     ) {
-                        $error = 'Akun mentor belum disetujui. Tunggu konfirmasi dari admin.';
+                        $error = 'Akun mentor belum diverifikasi. Tunggu konfirmasi dari admin.';
                     } else {
                         session_regenerate_id(true);
 
@@ -157,7 +156,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn-google:hover { border-color: #4285f4; background: #f8fafc; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(66, 133, 244, 0.15); }
         .btn-google svg { flex-shrink: 0; }
         
-        /* Alert dengan animasi fade-out */
         .alert { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 12px; margin-bottom: 16px; font-size: 0.9rem; font-weight: 500; transition: opacity 0.5s ease, transform 0.5s ease; }
         .alert-error { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); color: #dc2626; border: 1px solid #fecaca; }
         .alert svg { flex-shrink: 0; }
@@ -277,7 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // Auto-dismiss alert setelah 5 detik
         (function() {
             const alert = document.getElementById('alert-notif');
             if (alert) {
@@ -285,8 +282,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     alert.classList.add('fade-out');
                     setTimeout(function() {
                         alert.remove();
-                    }, 500); // Hapus element setelah animasi selesai
-                }, 5000); // 5 detik
+                    }, 500);
+                }, 5000);
             }
         })();
     </script>

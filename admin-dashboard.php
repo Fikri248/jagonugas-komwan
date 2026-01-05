@@ -40,7 +40,7 @@ try {
     $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'");
     $totalUsers = (int) $stmt->fetchColumn();
     
-    // ✅ Total Mentors (simple count)
+    // ✅ Total Mentors (ALL mentors - pending + verified)
     $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor'");
     $totalMentors = (int) $stmt->fetchColumn();
     
@@ -160,7 +160,8 @@ try {
     ");
     $activeMembers = (int) $stmt->fetchColumn();
     
-    $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_approved = 0");
+    // ✅ CHANGE: is_verified = 0 (not is_approved)
+    $stmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 0");
     $pendingMentors = (int) $stmt->fetchColumn();
     
 } catch (PDOException $e) {
@@ -335,16 +336,7 @@ function getStatusBadge($status) {
                     <span class="admin-stat-label">Member Aktif</span>
                 </div>
             </div>
-            
-            <div class="admin-stat-card">
-                <div class="admin-stat-icon indigo">
-                    <i class="bi bi-chat-square-text-fill"></i>
-                </div>
-                <div class="admin-stat-info">
-                    <span class="admin-stat-value"><?php echo number_format($totalThreads); ?></span>
-                    <span class="admin-stat-label">Forum Threads</span>
-                </div>
-            </div>
+        
             
             <div class="admin-stat-card">
                 <div class="admin-stat-icon orange">

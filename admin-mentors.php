@@ -28,7 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($mentorId > 0 && in_array($action, ['approve', 'reject'], true)) {
         try {
             if ($action === 'approve') {
-                $stmt = $pdo->prepare("UPDATE users SET is_approved = 1, updated_at = NOW() WHERE id = ? AND role = 'mentor'");
+                // ✅ CHANGE: is_verified = 1 (not is_approved)
+                $stmt = $pdo->prepare("UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ? AND role = 'mentor'");
                 $stmt->execute([$mentorId]);
 
                 $stmt = $pdo->prepare("
@@ -42,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
 
             if ($action === 'reject') {
-                $stmt = $pdo->prepare("UPDATE users SET is_approved = 2, updated_at = NOW() WHERE id = ? AND role = 'mentor'");
+                // ✅ CHANGE: is_verified = 2 (not is_approved)
+                $stmt = $pdo->prepare("UPDATE users SET is_verified = 2, updated_at = NOW() WHERE id = ? AND role = 'mentor'");
                 $stmt->execute([$mentorId]);
 
                 $stmt = $pdo->prepare("
@@ -63,21 +65,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Filter
 $filter = $_GET['filter'] ?? 'pending';
 
-// Query mentors
+// ✅ CHANGE: Query mentors (is_verified)
 $sql = "SELECT * FROM users WHERE role = 'mentor'";
-if ($filter === 'pending') $sql .= " AND is_approved = 0";
-elseif ($filter === 'approved') $sql .= " AND is_approved = 1";
-elseif ($filter === 'rejected') $sql .= " AND is_approved = 2";
+if ($filter === 'pending') $sql .= " AND is_verified = 0";
+elseif ($filter === 'approved') $sql .= " AND is_verified = 1";
+elseif ($filter === 'rejected') $sql .= " AND is_verified = 2";
 $sql .= " ORDER BY created_at DESC";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute();
 $mentors = $stmt->fetchAll();
 
-// Counts
-$pendingCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_approved = 0")->fetchColumn();
-$approvedCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_approved = 1")->fetchColumn();
-$rejectedCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_approved = 2")->fetchColumn();
+// ✅ CHANGE: Counts (is_verified)
+$pendingCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 0")->fetchColumn();
+$approvedCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 1")->fetchColumn();
+$rejectedCount = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 2")->fetchColumn();
 
 // Session counts
 $sessionCounts = [];
@@ -222,14 +224,11 @@ while ($row = $stmtSessions->fetch()) {
             border: 2px solid #f59e0b;
         }
 
-        /* ========================================
-           GRID LAYOUT - SIMETRIS
-           ======================================== */
         .mentor-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
             gap: 1.5rem;
-            align-items: start; /* Prevent stretching */
+            align-items: start;
         }
 
         .mentor-card {
@@ -239,8 +238,6 @@ while ($row = $stmtSessions->fetch()) {
             overflow: hidden;
             transition: all 0.3s ease;
             border: 2px solid transparent;
-            
-            /* KEY: Bikin card flexible tapi simetris */
             display: flex;
             flex-direction: column;
             height: 100%;
@@ -267,7 +264,7 @@ while ($row = $stmtSessions->fetch()) {
             padding: 1.5rem;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-bottom: 1px solid #e2e8f0;
-            flex-shrink: 0; /* Prevent header from growing */
+            flex-shrink: 0;
         }
 
         .mentor-profile {
@@ -337,7 +334,7 @@ while ($row = $stmtSessions->fetch()) {
 
         .mentor-body {
             padding: 1.5rem;
-            flex: 1; /* Take remaining space */
+            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
@@ -418,9 +415,6 @@ while ($row = $stmtSessions->fetch()) {
             line-height: 1.6;
         }
 
-        /* ========================================
-           TRANSKRIP SECTION - SIMETRIS IMAGE
-           ======================================== */
         .transkrip-section {
             margin-top: 0.5rem;
             padding: 1rem;
@@ -463,11 +457,10 @@ while ($row = $stmtSessions->fetch()) {
             color: white;
         }
 
-        /* KEY: Fixed aspect ratio container untuk image simetris */
         .transkrip-preview {
             position: relative;
             width: 100%;
-            padding-top: 66.67%; /* 3:2 aspect ratio */
+            padding-top: 66.67%;
             border-radius: 8px;
             overflow: hidden;
             background: #f1f5f9;
@@ -480,7 +473,7 @@ while ($row = $stmtSessions->fetch()) {
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover; /* Crop to fill container */
+            object-fit: cover;
             object-position: center;
             cursor: pointer;
             transition: transform 0.3s ease;
@@ -490,7 +483,6 @@ while ($row = $stmtSessions->fetch()) {
             transform: scale(1.05);
         }
 
-        /* Alternative style untuk contain (tampilkan full image) */
         .transkrip-preview.contain {
             padding-top: 0;
             min-height: 200px;
@@ -550,7 +542,7 @@ while ($row = $stmtSessions->fetch()) {
             border-top: 1px solid #e2e8f0;
             display: flex;
             gap: 0.75rem;
-            margin-top: auto; /* Push to bottom */
+            margin-top: auto;
             flex-shrink: 0;
         }
 
@@ -613,7 +605,6 @@ while ($row = $stmtSessions->fetch()) {
             color: #64748b;
         }
 
-        /* Modal Styles */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -735,9 +726,6 @@ while ($row = $stmtSessions->fetch()) {
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
 
-        /* ========================================
-           RESPONSIVE
-           ======================================== */
         @media (max-width: 768px) {
             .main-content {
                 padding: 1rem;
@@ -756,7 +744,7 @@ while ($row = $stmtSessions->fetch()) {
             }
 
             .transkrip-preview {
-                padding-top: 75%; /* 4:3 on mobile */
+                padding-top: 75%;
             }
         }
 
@@ -849,11 +837,12 @@ while ($row = $stmtSessions->fetch()) {
             <div class="mentor-grid">
                 <?php foreach ($mentors as $mentor): ?>
                     <?php 
+                    // ✅ CHANGE: Use is_verified (not is_approved)
                     $statusClass = '';
                     $statusLabel = '';
                     $statusIcon = '';
                     
-                    switch ($mentor['is_approved']) {
+                    switch ($mentor['is_verified']) {
                         case 0:
                             $statusClass = 'pending';
                             $statusLabel = 'Pending Approval';
@@ -928,7 +917,7 @@ while ($row = $stmtSessions->fetch()) {
                             </div>
 
                             <!-- Stats (hanya untuk approved) -->
-                            <?php if ($mentor['is_approved'] == 1): ?>
+                            <?php if ($mentor['is_verified'] == 1): ?>
                             <div class="stats-row">
                                 <div class="stat-item">
                                     <i class="bi bi-star-fill"></i>
@@ -1015,7 +1004,7 @@ while ($row = $stmtSessions->fetch()) {
 
                         <!-- Actions -->
                         <div class="mentor-actions">
-                            <?php if ($mentor['is_approved'] == 0): ?>
+                            <?php if ($mentor['is_verified'] == 0): ?>
                                 <button type="button" class="btn-action approve"
                                         onclick="showConfirmModal('approve', <?= (int)$mentor['id'] ?>, '<?= htmlspecialchars($mentor['name'] ?? '', ENT_QUOTES) ?>')">
                                     <i class="bi bi-check-lg"></i>
@@ -1026,7 +1015,7 @@ while ($row = $stmtSessions->fetch()) {
                                     <i class="bi bi-x-lg"></i>
                                     Tolak
                                 </button>
-                            <?php elseif ($mentor['is_approved'] == 2): ?>
+                            <?php elseif ($mentor['is_verified'] == 2): ?>
                                 <button type="button" class="btn-action approve"
                                         onclick="showConfirmModal('approve', <?= (int)$mentor['id'] ?>, '<?= htmlspecialchars($mentor['name'] ?? '', ENT_QUOTES) ?>')">
                                     <i class="bi bi-arrow-repeat"></i>
@@ -1120,7 +1109,6 @@ while ($row = $stmtSessions->fetch()) {
         document.body.style.overflow = '';
     }
 
-    // Auto-dismiss alert
     setTimeout(() => {
         document.querySelectorAll('.alert-custom').forEach(alert => {
             alert.style.opacity = '0';
@@ -1129,7 +1117,6 @@ while ($row = $stmtSessions->fetch()) {
         });
     }, 5000);
 
-    // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             closeImageModal();

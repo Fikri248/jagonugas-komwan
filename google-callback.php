@@ -1,5 +1,5 @@
 <?php
-// google-callback.php - UPDATED VERSION
+// google-callback.php - UPDATED VERSION (is_verified)
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
@@ -229,10 +229,10 @@ try {
             exit;
         }
 
-        // ✅ FIX: Check is_approved instead of is_verified
-        if (isset($existingUser['is_approved']) && !$existingUser['is_approved']) {
+        // ✅ CHECK is_verified ONLY
+        if (isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
             cleanupOAuthSession();
-            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Akun mentor belum disetujui admin. Mohon tunggu 1x24 jam.'));
+            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Akun mentor belum diverifikasi admin. Mohon tunggu 1x24 jam.'));
             exit;
         }
 
@@ -263,10 +263,10 @@ try {
     if ($existingUser) {
         // USER SUDAH ADA - LANGSUNG LOGIN
         
-        // ✅ FIX: Mentor check dengan is_approved
-        if ($existingUser['role'] === 'mentor' && isset($existingUser['is_approved']) && !$existingUser['is_approved']) {
+        // ✅ CHECK is_verified for mentors
+        if ($existingUser['role'] === 'mentor' && isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
             cleanupOAuthSession();
-            header('Location: ' . url_path('login.php') . '?error=' . urlencode('Akun mentor belum disetujui admin. Mohon tunggu 1x24 jam.'));
+            header('Location: ' . url_path('login.php') . '?error=' . urlencode('Akun mentor belum diverifikasi admin. Mohon tunggu 1x24 jam.'));
             exit;
         }
 
