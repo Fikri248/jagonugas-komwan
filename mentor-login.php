@@ -66,7 +66,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password wajib diisi';
     } else {
         try {
-            // ✅ Use $pdo from db.php instead of Database class
             $user = new User($pdo);
 
             $user->email = $oldEmail;
@@ -81,16 +80,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($role !== 'mentor') {
                         $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
-                    } elseif (array_key_exists('is_approved', $u) && !$u['is_approved']) {
-                        // ✅ FIX: Changed is_verified to is_approved
-                        $error = 'Akun mentor belum disetujui oleh admin. Mohon tunggu 1x24 jam.';
+                    } elseif (array_key_exists('is_verified', $u) && !$u['is_verified']) {
+                        // ✅ CHECK is_verified ONLY
+                        $error = 'Akun mentor belum diverifikasi oleh admin. Mohon tunggu 1x24 jam.';
                     } else {
                         session_regenerate_id(true);
 
                         $_SESSION['user_id'] = $u['id'] ?? null;
                         $_SESSION['name'] = $u['name'] ?? '';
                         $_SESSION['email'] = $u['email'] ?? $oldEmail;
-                        $_SESSION['role'] = $role;
+                        $_SESSION['role'] = 'mentor';
                         $_SESSION['gems'] = $u['gems'] ?? 0;
                         $_SESSION['avatar'] = $u['avatar'] ?? null;
                         $_SESSION['login_time'] = time();
@@ -112,9 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['user_id'] = $user->id ?? null;
                         $_SESSION['name'] = $user->name ?? '';
                         $_SESSION['email'] = $oldEmail;
-                        $_SESSION['role'] = $role;
-                        $_SESSION['gems'] = $user->gems ?? 0;
-                        $_SESSION['avatar'] = $user->avatar ?? null;
+                        $_SESSION['role'] = 'mentor';
                         $_SESSION['login_time'] = time();
 
                         header('Location: ' . url_path('mentor-dashboard.php'));
@@ -164,7 +161,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .auth-input:hover { border-color: #cbd5e1; background: #ffffff; }
         .auth-input:focus { border-color: #10b981; background: #ffffff; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
 
-        /* Alerts with auto-dismiss */
         .alert { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; font-weight: 500; transition: opacity 0.5s ease, transform 0.5s ease; }
         .alert-error { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); color: #dc2626; border: 1px solid #fecaca; }
         .alert-success { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); color: #16a34a; border: 1px solid #bbf7d0; }
@@ -173,12 +169,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .auth-link { color: #10b981; font-size: 0.9rem; text-decoration: none; font-weight: 500; }
         .auth-link:hover { text-decoration: underline; }
 
-        /* Buttons */
         .btn { padding: 14px 24px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 1rem; transition: all 0.3s ease; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: none; cursor: pointer; width: 100%; }
         .btn-mentor { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
         .btn-mentor:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(16,185,129,0.3); }
 
-        /* Google Button */
         .btn-google { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px 20px; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 12px; color: #1f2937; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-decoration: none; margin-bottom: 16px; }
         .btn-google:hover { border-color: #4285f4; background: #f8fafc; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(66,133,244,0.15); }
 
@@ -242,7 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <!-- Google Login Button -->
         <a href="<?php echo htmlspecialchars(url_path('google-auth.php?action=mentor-login')); ?>" class="btn-google">
             <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -309,7 +302,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-dismiss alerts
         function autoDismissAlert(id, delay) {
             const alert = document.getElementById(id);
             if (alert) {
@@ -320,7 +312,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Error hilang setelah 5 detik, success setelah 8 detik
         autoDismissAlert('alert-error', 5000);
         autoDismissAlert('alert-success', 8000);
     });

@@ -1,12 +1,13 @@
 <?php
-// admin-users.php - UPDATED VERSION
+/**
+ * Admin Users Management Page
+ * Manages all users (students & mentors) with filtering, search, pagination
+ * Supports is_verified field for mentor approval workflow
+ * ADDED: Admin can upgrade user membership
+ */
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
-
-// ✅ TRACK VISITOR
-if (file_exists(__DIR__ . '/track-visitor.php')) {
-    require_once __DIR__ . '/track-visitor.php';
-}
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -19,14 +20,74 @@ function url_path(string $path = ''): string
     return $base . ($path === '/' ? '' : $path);
 }
 
+// Check admin authentication
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     header("Location: " . url_path('login.php'));
     exit;
 }
 
+// Get flash messages
 $success = $_SESSION['success'] ?? '';
 $error = $_SESSION['error'] ?? '';
 unset($_SESSION['success'], $_SESSION['error']);
+
+// ✅ HANDLE UPGRADE MEMBERSHIP
+if (isset($_POST['upgrade_membership']) && isset($_POST['user_id']) && isset($_POST['package_id'])) {
+    $userId = intval($_POST['user_id']);
+    $packageId = intval($_POST['package_id']);
+    
+    try {
+        // Get package info
+        $stmt = $pdo->prepare("SELECT name, code FROM gem_packages WHERE id = ?");
+        $stmt->execute([$packageId]);
+        $package = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$package) {
+            throw new Exception("Package not found");
+        }
+        
+        // Check if user already has active membership
+        $stmt = $pdo->prepare("
+            SELECT id, membership_id 
+            FROM memberships 
+            WHERE user_id = ? AND status = 'active' AND end_date >= NOW()
+            LIMIT 1
+        ");
+        $stmt->execute([$userId]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($existing) {
+            // Expire old membership
+            $stmt = $pdo->prepare("
+                UPDATE memberships 
+                SET status = 'expired', updated_at = NOW() 
+                WHERE id = ?
+            ");
+            $stmt->execute([$existing['id']]);
+        }
+        
+        // Create new membership
+        $stmt = $pdo->prepare("
+            INSERT INTO memberships 
+            (user_id, membership_id, status, start_date, end_date, created_at)
+            VALUES (?, ?, 'active', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), NOW())
+        ");
+        $stmt->execute([$userId, $packageId]);
+        
+        // Send notification to user
+        $stmt = $pdo->prepare("
+            INSERT INTO notifications 
+            (user_id, type, title, message, icon, color, created_at)
+            VALUES (?, 'membership', '🎉 Membership Upgraded!', 'Admin telah mengupgrade membership Anda ke " . $package['name'] . "!', 'gift', '#10b981', NOW())
+        ");
+        $stmt->execute([$userId]);
+        
+        $success = "Membership berhasil diupgrade ke " . $package['name'] . "!";
+        
+    } catch (Exception $e) {
+        $error = 'Gagal upgrade membership: ' . $e->getMessage();
+    }
+}
 
 // Handle delete user
 if (isset($_POST['delete_user']) && isset($_POST['user_id'])) {
@@ -41,7 +102,7 @@ if (isset($_POST['delete_user']) && isset($_POST['user_id'])) {
     }
 }
 
-// Get filter & search
+// Get filter & search parameters
 $filter = $_GET['filter'] ?? 'all';
 $search = $_GET['search'] ?? '';
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
@@ -49,6 +110,7 @@ $perPage = 20;
 $offset = ($page - 1) * $perPage;
 
 try {
+    // Main query to get users with membership data
     $sql = "
         SELECT 
             u.id,
@@ -58,7 +120,7 @@ try {
             u.program_studi,
             u.semester,
             u.created_at,
-            u.is_approved,
+            u.is_verified,
             m.id as has_membership,
             m.membership_id,
             m.status as membership_status,
@@ -75,6 +137,7 @@ try {
         WHERE u.role IN ('student', 'mentor')
     ";
 
+    // Count query
     $countSql = "
         SELECT COUNT(DISTINCT u.id)
         FROM users u
@@ -87,6 +150,7 @@ try {
     $params = [];
     $countParams = [];
 
+    // Apply filters
     if ($filter === 'subscribed') {
         $sql .= " AND m.id IS NOT NULL";
         $countSql .= " AND m.id IS NOT NULL";
@@ -100,10 +164,11 @@ try {
         $sql .= " AND u.role = 'mentor'";
         $countSql .= " AND u.role = 'mentor'";
     } elseif ($filter === 'pending') {
-        $sql .= " AND u.role = 'mentor' AND u.is_approved = 0";
-        $countSql .= " AND u.role = 'mentor' AND u.is_approved = 0";
+        $sql .= " AND u.role = 'mentor' AND u.is_verified = 0";
+        $countSql .= " AND u.role = 'mentor' AND u.is_verified = 0";
     }
 
+    // Apply search
     if (!empty($search)) {
         $sql .= " AND (u.name LIKE ? OR u.email LIKE ?)";
         $countSql .= " AND (u.name LIKE ? OR u.email LIKE ?)";
@@ -114,17 +179,21 @@ try {
         $countParams[] = $searchParam;
     }
 
+    // Get total count
     $stmtCount = $pdo->prepare($countSql);
     $stmtCount->execute($countParams);
     $totalUsers = (int) $stmtCount->fetchColumn();
     $totalPages = ceil($totalUsers / $perPage);
 
+    // Add pagination to main query
     $sql .= " ORDER BY u.created_at DESC LIMIT $perPage OFFSET $offset";
 
+    // Execute main query
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Get stats for filter buttons
     $stmtAll = $pdo->query("SELECT COUNT(*) FROM users WHERE role IN ('student', 'mentor')");
     $countAll = (int) $stmtAll->fetchColumn();
 
@@ -148,9 +217,10 @@ try {
     $stmtMentors = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor'");
     $countMentors = (int) $stmtMentors->fetchColumn();
 
-    $stmtPending = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_approved = 0");
+    $stmtPending = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor' AND is_verified = 0");
     $countPending = (int) $stmtPending->fetchColumn();
 
+    // Check for pending membership sync
     $stmtPendingSync = $pdo->query("
         SELECT COUNT(DISTINCT gt.user_id) 
         FROM gem_transactions gt
@@ -163,6 +233,10 @@ try {
         AND u.role = 'student'
     ");
     $pendingSync = (int) $stmtPendingSync->fetchColumn();
+    
+    // ✅ GET AVAILABLE PACKAGES FOR UPGRADE
+    $stmtPackages = $pdo->query("SELECT id, name, code, price FROM gem_packages WHERE is_active = 1 ORDER BY price ASC");
+    $packages = $stmtPackages->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
     error_log("Admin users query error: " . $e->getMessage());
@@ -176,6 +250,7 @@ try {
     $countMentors = 0;
     $countPending = 0;
     $pendingSync = 0;
+    $packages = [];
 }
 ?>
 <!DOCTYPE html>
@@ -233,7 +308,6 @@ try {
         tbody td { padding: 14px 12px; border-top: 1px solid #f1f5f9; color: #1e293b; font-size: 0.9rem; }
         tbody tr:hover { background: #f8fafc; }
         
-        /* ✅ Style khusus untuk mentor membership cell */
         tbody tr[data-role="mentor"] .membership-col {
             background: #f8fafc;
             color: #cbd5e1;
@@ -263,6 +337,8 @@ try {
         .btn-action { padding: 6px 10px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
         .btn-view { background: #dbeafe; color: #2563eb; }
         .btn-view:hover { background: #3b82f6; color: white; }
+        .btn-upgrade { background: #d1fae5; color: #059669; }
+        .btn-upgrade:hover { background: #10b981; color: white; }
         .btn-delete { background: #fee2e2; color: #dc2626; }
         .btn-delete:hover { background: #dc2626; color: white; }
         
@@ -290,7 +366,9 @@ try {
         .modal.active { display: flex; }
         .modal-content { background: white; padding: 2rem; border-radius: 16px; max-width: 500px; width: 90%; text-align: center; animation: modalSlideIn 0.3s ease; }
         @keyframes modalSlideIn { from { opacity: 0; transform: translateY(-50px); } to { opacity: 1; transform: translateY(0); } }
-        .modal-content i { font-size: 3rem; color: #ef4444; margin-bottom: 1rem; }
+        .modal-content i.modal-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .modal-content i.modal-icon.danger { color: #ef4444; }
+        .modal-content i.modal-icon.success { color: #10b981; }
         .modal-content h3 { margin-bottom: 1rem; color: #1a202c; }
         .modal-content p { color: #64748b; margin-bottom: 2rem; }
         .modal-actions { display: flex; gap: 1rem; }
@@ -299,6 +377,16 @@ try {
         .btn-modal.cancel:hover { background: #e2e8f0; }
         .btn-modal.confirm { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
         .btn-modal.confirm:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+        .btn-modal.confirm.success { background: linear-gradient(135deg, #10b981, #059669); }
+        .btn-modal.confirm.success:hover { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+        
+        .package-list { display: grid; gap: 12px; margin-bottom: 2rem; }
+        .package-item { padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.3s; }
+        .package-item:hover { border-color: #667eea; background: #f8fafc; }
+        .package-item input[type="radio"] { cursor: pointer; }
+        .package-info { flex: 1; margin-left: 12px; }
+        .package-name { font-weight: 600; color: #1e293b; }
+        .package-price { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
         
         @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -328,6 +416,7 @@ try {
     <?php include __DIR__ . '/admin-navbar.php'; ?>
 
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <h1><i class="bi bi-people-fill"></i> Daftar Pengguna</h1>
             <div class="header-actions">
@@ -347,6 +436,7 @@ try {
             </div>
         </div>
 
+        <!-- Alert Messages -->
         <?php if ($success): ?>
         <div class="alert alert-success">
             <i class="bi bi-check-circle-fill fs-5"></i>
@@ -361,6 +451,7 @@ try {
         </div>
         <?php endif; ?>
 
+        <!-- Membership Sync Alert -->
         <?php if ($pendingSync > 0): ?>
         <div class="alert-sync">
             <i class="bi bi-exclamation-triangle-fill"></i>
@@ -374,6 +465,7 @@ try {
         </div>
         <?php endif; ?>
 
+        <!-- Stats Summary -->
         <div class="stats-summary">
             <div class="stat-card">
                 <div class="icon"><i class="bi bi-people-fill"></i></div>
@@ -397,6 +489,7 @@ try {
             </div>
         </div>
 
+        <!-- Filters -->
         <div class="filters">
             <a href="?filter=all" class="filter-btn <?= $filter === 'all' ? 'active' : '' ?>">
                 <i class="bi bi-grid"></i> Semua (<?= $countAll ?>)
@@ -428,6 +521,7 @@ try {
             </div>
         </div>
 
+        <!-- Users Table -->
         <div class="card">
             <table>
                 <thead>
@@ -472,7 +566,7 @@ try {
                             </td>
                             <td><?= htmlspecialchars($user['program_studi'] ?? '-') ?></td>
                             
-                            <!-- ✅ MEMBERSHIP COLUMN -->
+                            <!-- Membership Column -->
                             <td class="membership-col">
                                 <?php if ($isMentor): ?>
                                     -
@@ -490,15 +584,15 @@ try {
                                 <?php endif; ?>
                             </td>
                             
-                            <!-- ✅ STATUS COLUMN -->
+                            <!-- Status Column -->
                             <td>
                                 <?php 
                                 if ($isMentor) {
-                                    $isApproved = $user['is_approved'] ?? 0;
+                                    $isVerified = $user['is_verified'] ?? 0;
                                     
-                                    if ($isApproved == 1) {
+                                    if ($isVerified == 1) {
                                         echo '<span class="status active"><i class="bi bi-check-circle-fill"></i> Active</span>';
-                                    } elseif ($isApproved == 2) {
+                                    } elseif ($isVerified == 2) {
                                         echo '<span class="status rejected"><i class="bi bi-x-circle-fill"></i> Rejected</span>';
                                     } else {
                                         echo '<span class="status pending"><i class="bi bi-hourglass-split"></i> Pending</span>';
@@ -524,6 +618,12 @@ try {
                                     <a href="<?= url_path('admin-user-detail.php?id=' . $user['id']) ?>" class="btn-action btn-view" title="View Detail">
                                         <i class="bi bi-eye"></i>
                                     </a>
+                                    <?php if (!$isMentor): ?>
+                                    <button type="button" class="btn-action btn-upgrade" title="Upgrade Membership"
+                                            onclick="showUpgradeModal(<?= $user['id'] ?>, '<?= htmlspecialchars($user['name'], ENT_QUOTES) ?>', '<?= $user['membership_name'] ?? 'Free' ?>')">
+                                        <i class="bi bi-arrow-up-circle"></i>
+                                    </button>
+                                    <?php endif; ?>
                                     <button type="button" class="btn-action btn-delete" title="Delete User"
                                             onclick="confirmDelete(<?= $user['id'] ?>, '<?= htmlspecialchars($user['name'], ENT_QUOTES) ?>')">
                                         <i class="bi bi-trash"></i>
@@ -537,6 +637,7 @@ try {
             </table>
         </div>
 
+        <!-- Pagination -->
         <?php if ($totalPages > 1): ?>
         <div class="pagination">
             <?php if ($page > 1): ?>
@@ -566,9 +667,10 @@ try {
         <?php endif; ?>
     </div>
 
+    <!-- Delete Modal -->
     <div class="modal" id="deleteModal">
         <div class="modal-content">
-            <i class="bi bi-exclamation-triangle-fill"></i>
+            <i class="bi bi-exclamation-triangle-fill modal-icon danger"></i>
             <h3>Hapus User?</h3>
             <p id="deleteMessage">Apakah Anda yakin ingin menghapus user ini? Tindakan ini tidak dapat dibatalkan.</p>
             
@@ -577,14 +679,55 @@ try {
                 <input type="hidden" name="user_id" id="deleteUserId">
                 
                 <div class="modal-actions">
-                    <button type="button" class="btn-modal cancel" onclick="closeDeleteModal()">Batal</button>
+                    <button type="button" class="btn-modal cancel" onclick="closeModal('deleteModal')">Batal</button>
                     <button type="submit" class="btn-modal confirm">Ya, Hapus</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <!-- Upgrade Membership Modal -->
+    <div class="modal" id="upgradeModal">
+        <div class="modal-content">
+            <i class="bi bi-arrow-up-circle-fill modal-icon success"></i>
+            <h3>Upgrade Membership</h3>
+            <p id="upgradeMessage">Pilih paket membership untuk <strong id="upgradeUserName"></strong></p>
+            
+            <form method="POST" id="upgradeForm">
+                <input type="hidden" name="upgrade_membership" value="1">
+                <input type="hidden" name="user_id" id="upgradeUserId">
+                
+                <div class="package-list">
+                    <?php foreach ($packages as $pkg): ?>
+                    <label class="package-item">
+                        <input type="radio" name="package_id" value="<?= $pkg['id'] ?>" required>
+                        <div class="package-info">
+                            <div class="package-name">
+                                <i class="bi bi-star-fill"></i> <?= htmlspecialchars($pkg['name']) ?>
+                            </div>
+                            <div class="package-price">Rp <?= number_format($pkg['price'], 0, ',', '.') ?>/bulan</div>
+                        </div>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-modal cancel" onclick="closeModal('upgradeModal')">Batal</button>
+                    <button type="submit" class="btn-modal confirm success">Upgrade Sekarang</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        function showUpgradeModal(userId, userName, currentMembership) {
+            document.getElementById('upgradeUserId').value = userId;
+            document.getElementById('upgradeUserName').textContent = userName;
+            document.getElementById('upgradeMessage').innerHTML = 
+                `Pilih paket membership untuk <strong>${userName}</strong><br><small style="color: #64748b;">Membership saat ini: ${currentMembership}</small>`;
+            document.getElementById('upgradeModal').classList.add('active');
+        }
+
         function confirmDelete(userId, userName) {
             document.getElementById('deleteUserId').value = userId;
             document.getElementById('deleteMessage').innerHTML = 
@@ -592,18 +735,29 @@ try {
             document.getElementById('deleteModal').classList.add('active');
         }
 
-        function closeDeleteModal() {
-            document.getElementById('deleteModal').classList.remove('active');
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
         }
 
-        document.getElementById('deleteModal').addEventListener('click', function(e) {
-            if (e.target === this) closeDeleteModal();
+        // Close modal on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                }
+            });
         });
 
+        // Close modal on ESC key
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeDeleteModal();
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal').forEach(modal => {
+                    modal.classList.remove('active');
+                });
+            }
         });
 
+        // Auto dismiss alerts
         setTimeout(() => {
             document.querySelectorAll('.alert').forEach(alert => {
                 alert.style.opacity = '0';
