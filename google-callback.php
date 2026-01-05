@@ -1,13 +1,17 @@
 <?php
-// google-callback.php
+// google-callback.php - UPDATED VERSION
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/ModelUser.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
 }
 
 // =====================================================
@@ -29,22 +33,32 @@ if (strpos($host, 'jagonugasweb.azurewebsites.net') !== false) {
     define('GOOGLE_REDIRECT_URI', 'http://localhost/jagonugas-komwan/google-callback.php');
 }
 
+// ✅ Use BASE_PATH from config.php
 $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
 $action = $_SESSION['google_auth_action'] ?? 'login';
 
 /**
+ * Helper function untuk url_path
+ */
+function url_path(string $path = ''): string {
+    $base = defined('BASE_PATH') ? (string) constant('BASE_PATH') : '';
+    $path = '/' . ltrim($path, '/');
+    return rtrim($base, '/') . $path;
+}
+
+/**
  * Redirect dengan error message ke halaman yang sesuai
  */
-function redirectWithError(string $message, string $base, string $action = 'login'): void {
+function redirectWithError(string $message, string $action = 'login'): void {
     $redirectMap = [
-        'mentor-register' => '/mentor-register.php',
-        'mentor-login'    => '/mentor-login.php',
-        'register'        => '/register.php',
-        'login'           => '/login.php',
+        'mentor-register' => 'mentor-register.php',
+        'mentor-login'    => 'mentor-login.php',
+        'register'        => 'register.php',
+        'login'           => 'login.php',
     ];
     
-    $page = $redirectMap[$action] ?? '/login.php';
-    header('Location: ' . $base . $page . '?error=' . urlencode($message));
+    $page = $redirectMap[$action] ?? 'login.php';
+    header('Location: ' . url_path($page) . '?error=' . urlencode($message));
     exit;
 }
 
@@ -60,18 +74,18 @@ function cleanupOAuthSession(): void {
 // =====================================================
 if (!isset($_GET['state']) || $_GET['state'] !== ($_SESSION['google_oauth_state'] ?? '')) {
     error_log('Google OAuth: Invalid state parameter');
-    redirectWithError('Sesi tidak valid. Silakan coba lagi.', $BASE, $action);
+    redirectWithError('Sesi tidak valid. Silakan coba lagi.', $action);
 }
 
 if (isset($_GET['error'])) {
     $errorDesc = $_GET['error_description'] ?? $_GET['error'];
     error_log('Google OAuth Error: ' . $errorDesc);
-    redirectWithError('Login Google dibatalkan.', $BASE, $action);
+    redirectWithError('Login Google dibatalkan.', $action);
 }
 
 if (!isset($_GET['code'])) {
     error_log('Google OAuth: Missing authorization code');
-    redirectWithError('Kode otorisasi tidak ditemukan.', $BASE, $action);
+    redirectWithError('Kode otorisasi tidak ditemukan.', $action);
 }
 
 $code = $_GET['code'];
@@ -171,9 +185,7 @@ try {
     // =====================================================
     // STEP 3: Database lookup
     // =====================================================
-    $db = (new Database())->getConnection();
-
-    $stmt = $db->prepare("SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1");
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1");
     $stmt->execute([$email]);
     $existingUser = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -183,7 +195,7 @@ try {
     if ($action === 'mentor-register') {
         if ($existingUser && $existingUser['role'] === 'mentor') {
             cleanupOAuthSession();
-            header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Email sudah terdaftar sebagai mentor. Silakan login.'));
+            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Email sudah terdaftar sebagai mentor. Silakan login.'));
             exit;
         }
         
@@ -197,7 +209,7 @@ try {
         ];
         
         cleanupOAuthSession();
-        header('Location: ' . $BASE . '/complete-mentor-profile.php');
+        header('Location: ' . url_path('complete-mentor-profile.php'));
         exit;
     }
 
@@ -207,25 +219,26 @@ try {
     if ($action === 'mentor-login') {
         if (!$existingUser) {
             cleanupOAuthSession();
-            header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun tidak ditemukan. Silakan daftar terlebih dahulu.'));
+            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Akun tidak ditemukan. Silakan daftar terlebih dahulu.'));
             exit;
         }
 
         if ($existingUser['role'] !== 'mentor') {
             cleanupOAuthSession();
-            header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun ini bukan akun mentor. Silakan login di halaman utama.'));
+            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Akun ini bukan akun mentor. Silakan login di halaman utama.'));
             exit;
         }
 
-        if (isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
+        // ✅ FIX: Check is_approved instead of is_verified
+        if (isset($existingUser['is_approved']) && !$existingUser['is_approved']) {
             cleanupOAuthSession();
-            header('Location: ' . $BASE . '/mentor-login.php?error=' . urlencode('Akun mentor belum diverifikasi. Mohon tunggu 1x24 jam.'));
+            header('Location: ' . url_path('mentor-login.php') . '?error=' . urlencode('Akun mentor belum disetujui admin. Mohon tunggu 1x24 jam.'));
             exit;
         }
 
         // Link Google account jika belum
         if (empty($existingUser['google_id'])) {
-            $updateStmt = $db->prepare("UPDATE users SET google_id = ?, avatar = COALESCE(NULLIF(avatar, ''), ?) WHERE id = ?");
+            $updateStmt = $pdo->prepare("UPDATE users SET google_id = ?, avatar = COALESCE(NULLIF(avatar, ''), ?) WHERE id = ?");
             $updateStmt->execute([$googleId, $picture, $existingUser['id']]);
         }
 
@@ -240,7 +253,7 @@ try {
         $_SESSION['login_time'] = time();
 
         cleanupOAuthSession();
-        header('Location: ' . $BASE . '/mentor-dashboard.php');
+        header('Location: ' . url_path('mentor-dashboard.php'));
         exit;
     }
 
@@ -250,10 +263,10 @@ try {
     if ($existingUser) {
         // USER SUDAH ADA - LANGSUNG LOGIN
         
-        // Mentor belum verified
-        if ($existingUser['role'] === 'mentor' && isset($existingUser['is_verified']) && !$existingUser['is_verified']) {
+        // ✅ FIX: Mentor check dengan is_approved
+        if ($existingUser['role'] === 'mentor' && isset($existingUser['is_approved']) && !$existingUser['is_approved']) {
             cleanupOAuthSession();
-            header('Location: ' . $BASE . '/login.php?error=' . urlencode('Akun mentor belum diverifikasi. Mohon tunggu 1x24 jam.'));
+            header('Location: ' . url_path('login.php') . '?error=' . urlencode('Akun mentor belum disetujui admin. Mohon tunggu 1x24 jam.'));
             exit;
         }
 
@@ -272,7 +285,7 @@ try {
         
         if (!empty($updates)) {
             $params[] = $existingUser['id'];
-            $updateStmt = $db->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?");
+            $updateStmt = $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?");
             $updateStmt->execute($params);
             
             if (empty($existingUser['avatar']) && !empty($picture)) {
@@ -295,13 +308,13 @@ try {
         // Redirect sesuai role
         switch ($existingUser['role']) {
             case 'admin':
-                header('Location: ' . $BASE . '/admin-dashboard.php');
+                header('Location: ' . url_path('admin-dashboard.php'));
                 break;
             case 'mentor':
-                header('Location: ' . $BASE . '/mentor-dashboard.php');
+                header('Location: ' . url_path('mentor-dashboard.php'));
                 break;
             default:
-                header('Location: ' . $BASE . '/student-dashboard.php');
+                header('Location: ' . url_path('student-dashboard.php'));
         }
         exit;
 
@@ -315,19 +328,20 @@ try {
         ];
 
         cleanupOAuthSession();
-        header('Location: ' . $BASE . '/complete-profile.php');
+        header('Location: ' . url_path('complete-profile.php'));
         exit;
     }
 
 } catch (PDOException $e) {
     error_log('Google OAuth Database Error: ' . $e->getMessage() . ' | Code: ' . $e->getCode());
-    redirectWithError('Kesalahan database. Silakan coba lagi.', $BASE, $action);
+    redirectWithError('Kesalahan database. Silakan coba lagi.', $action);
 
 } catch (RuntimeException $e) {
     error_log('Google OAuth Runtime Error: ' . $e->getMessage());
-    redirectWithError($e->getMessage(), $BASE, $action);
+    redirectWithError($e->getMessage(), $action);
 
 } catch (Throwable $e) {
     error_log('Google OAuth Error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ':' . $e->getLine());
-    redirectWithError('Terjadi kesalahan. Silakan coba lagi.', $BASE, $action);
+    redirectWithError('Terjadi kesalahan. Silakan coba lagi.', $action);
 }
+?>

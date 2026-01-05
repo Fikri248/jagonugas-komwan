@@ -1,14 +1,16 @@
 <?php
-// admin-users.php
+// admin-users.php - UPDATED VERSION
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
-$BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 
 function url_path(string $path = ''): string
 {
@@ -18,7 +20,7 @@ function url_path(string $path = ''): string
 }
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: " . $BASE . "/login.php");
+    header("Location: " . url_path('login.php'));
     exit;
 }
 
@@ -56,22 +58,15 @@ try {
             u.program_studi,
             u.semester,
             u.created_at,
-            u.gems_balance,
-            u.gems,
             u.is_approved,
-            u.total_rating,
-            u.review_count,
-            CASE 
-                WHEN u.review_count > 0 THEN ROUND(u.total_rating / u.review_count, 1)
-                ELSE 0 
-            END as avg_rating,
             m.id as has_membership,
             m.membership_id,
             m.status as membership_status,
             m.start_date as membership_start,
             m.end_date as membership_end,
             gp.name as membership_name,
-            gp.code as membership_code
+            gp.code as membership_code,
+            gp.price as membership_price
         FROM users u
         LEFT JOIN memberships m ON u.id = m.user_id 
             AND m.status = 'active' 
@@ -291,8 +286,6 @@ try {
         .empty-state i { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
         .empty-state h3 { font-size: 1.2rem; margin-bottom: 8px; color: #64748b; }
         
-        .rating { color: #fbbf24; font-size: 0.85rem; }
-        
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal.active { display: flex; }
         .modal-content { background: white; padding: 2rem; border-radius: 16px; max-width: 500px; width: 90%; text-align: center; animation: modalSlideIn 0.3s ease; }
@@ -338,15 +331,13 @@ try {
         <div class="header">
             <h1><i class="bi bi-people-fill"></i> Daftar Pengguna</h1>
             <div class="header-actions">
-                <!-- ✅ Export Excel (Best) -->
                 <a href="<?= url_path('export-users-excel.php?filter=' . $filter . '&search=' . urlencode($search)) ?>" 
-                   class="btn btn-success" title="Export ke Excel dengan warna & styling professional">
+                   class="btn btn-success" title="Export ke Excel">
                     <i class="bi bi-file-earmark-excel-fill"></i> Export Excel
                 </a>
                 
-                <!-- ✅ Export PDF (Replace CSV) -->
                 <a href="<?= url_path('export-users-pdf.php?filter=' . $filter . '&search=' . urlencode($search)) ?>" 
-                   class="btn btn-danger" title="Export ke PDF dengan format professional">
+                   class="btn btn-danger" title="Export ke PDF">
                     <i class="bi bi-file-earmark-pdf-fill"></i> Export PDF
                 </a>
                 
@@ -448,8 +439,6 @@ try {
                         <th>Program Studi</th>
                         <th>Membership</th>
                         <th>Status</th>
-                        <th>Gems</th>
-                        <th>Rating</th>
                         <th>Bergabung</th>
                         <th>Actions</th>
                     </tr>
@@ -457,7 +446,7 @@ try {
                 <tbody>
                     <?php if (empty($users)): ?>
                     <tr>
-                        <td colspan="11" style="padding: 0;">
+                        <td colspan="9" style="padding: 0;">
                             <div class="empty-state">
                                 <i class="bi bi-inbox"></i>
                                 <h3>Tidak ada pengguna ditemukan</h3>
@@ -483,13 +472,11 @@ try {
                             </td>
                             <td><?= htmlspecialchars($user['program_studi'] ?? '-') ?></td>
                             
-                            <!-- ✅ MEMBERSHIP COLUMN - Berbeda untuk Student & Mentor -->
+                            <!-- ✅ MEMBERSHIP COLUMN -->
                             <td class="membership-col">
                                 <?php if ($isMentor): ?>
-                                    <!-- ✅ MENTOR: Tampil dash abu-abu saja -->
                                     -
                                 <?php else: ?>
-                                    <!-- ✅ STUDENT: Tampil badge membership -->
                                     <?php if ($user['membership_name']): ?>
                                         <span class="badge <?= strtolower($user['membership_code'] ?? 'pro') ?>">
                                             <i class="bi bi-star-fill"></i>
@@ -507,7 +494,6 @@ try {
                             <td>
                                 <?php 
                                 if ($isMentor) {
-                                    // Mentor: Check is_approved
                                     $isApproved = $user['is_approved'] ?? 0;
                                     
                                     if ($isApproved == 1) {
@@ -518,7 +504,6 @@ try {
                                         echo '<span class="status pending"><i class="bi bi-hourglass-split"></i> Pending</span>';
                                     }
                                 } else {
-                                    // Student: Check membership
                                     if ($user['has_membership']) {
                                         if ($user['membership_end'] && strtotime($user['membership_end']) < time()) {
                                             echo '<span class="status expired"><i class="bi bi-clock-history"></i> Expired</span>';
@@ -530,22 +515,6 @@ try {
                                     }
                                 }
                                 ?>
-                            </td>
-                            
-                            <td>
-                                <i class="bi bi-gem" style="color: #f59e0b;"></i>
-                                <?= number_format($user['gems_balance'] ?? $user['gems'] ?? 0) ?>
-                            </td>
-                            
-                            <td>
-                                <?php if ($isMentor && $user['review_count'] > 0): ?>
-                                    <span class="rating">
-                                        <i class="bi bi-star-fill"></i> <?= number_format($user['avg_rating'], 1) ?>
-                                        <small style="color: #64748b;">(<?= $user['review_count'] ?>)</small>
-                                    </span>
-                                <?php else: ?>
-                                    <span style="color: #94a3b8;">-</span>
-                                <?php endif; ?>
                             </td>
                             
                             <td><small><?= date('d M Y', strtotime($user['created_at'])) ?></small></td>
