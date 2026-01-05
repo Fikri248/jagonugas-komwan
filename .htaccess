@@ -1,45 +1,23 @@
 Options -Indexes
 
 RewriteEngine On
-RewriteBase /jagonugas-native
-
-
-# ===== LARGE FILE UPLOAD SETTINGS =====
-<IfModule mod_php.c>
-    php_value upload_max_filesize 300M
-    php_value post_max_size 310M
-    php_value max_execution_time 600
-    php_value max_input_time 600
-    php_value memory_limit 512M
-</IfModule>
-
-# Request timeout untuk large uploads
-<IfModule mod_reqtimeout.c>
-    RequestReadTimeout header=60 body=600
-</IfModule>
-
-# LimitRequestBody (0 = unlimited)
-LimitRequestBody 0
-
+# Comment RewriteBase untuk Azure (hanya pakai di localhost)
+# RewriteBase /jagonugas-native
 
 # ===== BYPASS: Payment files - akses langsung tanpa routing =====
-RewriteCond %{REQUEST_URI} ^/jagonugas-native/payment-.*\.php$ [NC]
+RewriteCond %{REQUEST_URI} payment-.*\.php$ [NC]
 RewriteRule ^ - [L]
-
 
 # ===== File/folder exist - akses langsung =====
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-
 # ===== Root request - pakai index.php =====
 RewriteRule ^$ index.php [L]
 
-
 # ===== Semua request lain - route ke app.php =====
 RewriteRule ^(.+)$ app.php [QSA,L]
-
 
 # ===== DEV ONLY: Disable cache untuk asset files =====
 <IfModule mod_headers.c>
