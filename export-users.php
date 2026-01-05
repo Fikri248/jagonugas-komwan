@@ -2,11 +2,16 @@
 /**
  * Export Users - All Formats (Excel, PDF, CSV)
  * Compatible with Azure, cPanel, Local XAMPP
+ * Version: 2.0 - Production Ready
  * Author: JagoNugas Admin System
  */
 
-// ✅ Start output buffering immediately
+// ✅ Configuration
 ob_start();
+error_reporting(0);
+ini_set('display_errors', 0);
+ini_set('memory_limit', '512M');
+ini_set('max_execution_time', '300');
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
@@ -15,27 +20,94 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// 🔒 Check admin authentication
+// 🔒 Security: Admin only
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     ob_end_clean();
     http_response_code(403);
     exit('Unauthorized Access');
 }
 
-// Get parameters
-$format = $_GET['format'] ?? 'excel'; // excel, pdf, csv
+// ✅ Get & validate parameters
+$format = $_GET['format'] ?? 'excel';
 $filter = $_GET['filter'] ?? 'all';
-$search = $_GET['search'] ?? '';
+$search = trim($_GET['search'] ?? '');
 
-// Initialize variables
+$validFormats = ['excel', 'pdf', 'csv'];
+if (!in_array($format, $validFormats)) {
+    ob_end_clean();
+    http_response_code(400);
+    exit('Invalid format. Use: excel, pdf, or csv');
+}
+
+// Initialize
 $users = [];
-$totalUsers = 0;
-$countStudents = 0;
-$countMentors = 0;
-$countSubscribed = 0;
+$globalStats = [
+    'total' => 0,
+    'students' => 0,
+    'mentors' => 0,
+    'subscribed' => 0
+];
+$filteredStats = [
+    'total' => 0,
+    'students' => 0,
+    'mentors' => 0,
+    'subscribed' => 0
+];
 
-// ✅ Query data users
+// ✅ Helper: Load vendor autoload
+function loadVendor() {
+    $vendorPaths = [
+        __DIR__ . '/vendor/autoload.php',
+        '/home/site/wwwroot/vendor/autoload.php',
+        dirname(__DIR__) . '/vendor/autoload.php',
+    ];
+    
+    foreach ($vendorPaths as $path) {
+        if (file_exists($path)) {
+            require_once $path;
+            return true;
+        }
+    }
+    return false;
+}
+
+// ✅ Helper functions
+function formatDate($date) {
+    if (!$date) return '-';
+    return date('d M Y, H:i', strtotime($date));
+}
+
+function formatDateShort($date) {
+    if (!$date) return '-';
+    return date('d-m-Y', strtotime($date));
+}
+
+function getStatusLabel($user) {
+    if ($user['role'] === 'mentor') {
+        return ($user['is_verified'] == 1) ? 'Active' : 'Pending';
+    }
+    return $user['membership_name'] ? 'Active' : 'Free';
+}
+
+function getMembershipLabel($user) {
+    if ($user['role'] === 'mentor') {
+        return '-';
+    }
+    return $user['membership_name'] ?? 'Free';
+}
+
+function formatSemester($semester) {
+    if (!$semester || $semester === '' || $semester === '0') {
+        return '-';
+    }
+    return is_numeric($semester) ? 'Sem ' . $semester : $semester;
+}
+
+// =======================================
+// ✅ QUERY DATA
+// =======================================
 try {
+    // Main query with filters
     $sql = "
         SELECT 
             u.id,
@@ -76,8 +148,9 @@ try {
 
     // Apply search
     if (!empty($search)) {
-        $sql .= " AND (u.name LIKE ? OR u.email LIKE ?)";
+        $sql .= " AND (u.name LIKE ? OR u.email LIKE ? OR u.program_studi LIKE ?)";
         $searchParam = "%$search%";
+        $params[] = $searchParam;
         $params[] = $searchParam;
         $params[] = $searchParam;
     }
@@ -88,87 +161,56 @@ try {
     $stmt->execute($params);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Get statistics
-    $totalUsers = count($users);
-    
-    $stmtStudents = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'");
-    $countStudents = (int) $stmtStudents->fetchColumn();
-    
-    $stmtMentors = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor'");
-    $countMentors = (int) $stmtMentors->fetchColumn();
-    
-    $stmtSubscribed = $pdo->query("
+    // ✅ Global statistics (all users)
+    $globalStats['students'] = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn();
+    $globalStats['mentors'] = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'mentor'")->fetchColumn();
+    $globalStats['total'] = $globalStats['students'] + $globalStats['mentors'];
+    $globalStats['subscribed'] = (int) $pdo->query("
         SELECT COUNT(DISTINCT u.id) FROM users u
         JOIN memberships m ON u.id = m.user_id
         WHERE m.status = 'active' AND m.end_date >= NOW()
-    ");
-    $countSubscribed = (int) $stmtSubscribed->fetchColumn();
+    ")->fetchColumn();
+
+    // ✅ Filtered statistics (dari hasil query)
+    $filteredStats['total'] = count($users);
+    foreach ($users as $user) {
+        if ($user['role'] === 'student') {
+            $filteredStats['students']++;
+            if ($user['membership_name']) {
+                $filteredStats['subscribed']++;
+            }
+        } elseif ($user['role'] === 'mentor') {
+            $filteredStats['mentors']++;
+        }
+    }
 
 } catch (PDOException $e) {
     error_log("Export users error: " . $e->getMessage());
     ob_end_clean();
     http_response_code(500);
-    exit('Database error: ' . $e->getMessage());
-}
-
-// Helper functions
-function formatDate($date) {
-    if (!$date) return '-';
-    return date('d M Y, H:i', strtotime($date));
-}
-
-function getStatusLabel($user) {
-    if ($user['role'] === 'mentor') {
-        return ($user['is_verified'] == 1) ? 'Active' : 'Pending';
-    }
-    return $user['membership_name'] ? 'Active' : 'Free';
-}
-
-function getMembershipLabel($user) {
-    if ($user['role'] === 'mentor') {
-        return '-';
-    }
-    return $user['membership_name'] ?? 'Free';
+    exit('Database error occurred');
 }
 
 // =======================================
 // EXPORT EXCEL
 // =======================================
 if ($format === 'excel') {
-    // Check vendor paths (multi-environment support)
-    $vendorPaths = [
-        __DIR__ . '/vendor/autoload.php',
-        '/home/site/wwwroot/vendor/autoload.php',
-        dirname(__DIR__) . '/vendor/autoload.php',
-    ];
-
-    $vendorFound = false;
-    foreach ($vendorPaths as $path) {
-        if (file_exists($path)) {
-            require_once $path;
-            $vendorFound = true;
-            break;
-        }
-    }
-
-    if ($vendorFound) {
+    if (loadVendor()) {
         try {
+            // ✅ Check ZIP extension
+            if (!extension_loaded('zip')) {
+                throw new Exception('ZIP extension not loaded. Enable in php.ini');
+            }
+
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle('Users Data');
 
-            // Column widths
-            $sheet->getColumnDimension('A')->setWidth(8);
-            $sheet->getColumnDimension('B')->setWidth(25);
-            $sheet->getColumnDimension('C')->setWidth(30);
-            $sheet->getColumnDimension('D')->setWidth(12);
-            $sheet->getColumnDimension('E')->setWidth(20);
-            $sheet->getColumnDimension('F')->setWidth(10);
-            $sheet->getColumnDimension('G')->setWidth(15);
-            $sheet->getColumnDimension('H')->setWidth(12);
-            $sheet->getColumnDimension('I')->setWidth(18);
-            $sheet->getColumnDimension('J')->setWidth(18);
-            $sheet->getColumnDimension('K')->setWidth(18);
+            // ✅ Column widths
+            $widths = ['A' => 6, 'B' => 25, 'C' => 30, 'D' => 12, 'E' => 20, 'F' => 8, 'G' => 15, 'H' => 12, 'I' => 15, 'J' => 15, 'K' => 18];
+            foreach ($widths as $col => $width) {
+                $sheet->getColumnDimension($col)->setWidth($width);
+            }
 
             // 🎨 Header Section
             $sheet->setCellValue('A1', 'DATA PENGGUNA JAGONUGAS');
@@ -178,18 +220,27 @@ if ($format === 'excel') {
             $sheet->getStyle('A1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('FF667EEA');
             $sheet->getStyle('A1')->getFont()->getColor()->setARGB('FFFFFFFF');
 
-            $sheet->setCellValue('A2', 'Tanggal Export: ' . date('d M Y H:i:s'));
+            $sheet->setCellValue('A2', 'Tanggal Export: ' . date('d M Y H:i:s') . ' WIB');
             $sheet->mergeCells('A2:K2');
             $sheet->getStyle('A2')->getFont()->setSize(10)->setItalic(true);
+            $sheet->getStyle('A2')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
-            $sheet->setCellValue('A3', 'Total: ' . $totalUsers . ' users | Students: ' . $countStudents . ' | Mentors: ' . $countMentors . ' | Subscribed: ' . $countSubscribed);
-            $sheet->mergeCells('A3:K3');
-            $sheet->getStyle('A3')->getFont()->setSize(9);
+            // ✅ Statistics (Filtered vs Global)
+            $infoRow = 3;
+            $statsText = 'Filtered: ' . $filteredStats['total'] . ' users | Students: ' . $filteredStats['students'] . ' | Mentors: ' . $filteredStats['mentors'] . ' | Subscribed: ' . $filteredStats['subscribed'];
+            
+            if ($filter !== 'all' || !empty($search)) {
+                $statsText .= ' || GLOBAL: ' . $globalStats['total'] . ' total | ' . $globalStats['students'] . ' students | ' . $globalStats['mentors'] . ' mentors';
+            }
+            
+            $sheet->setCellValue('A' . $infoRow, $statsText);
+            $sheet->mergeCells('A' . $infoRow . ':K' . $infoRow);
+            $sheet->getStyle('A' . $infoRow)->getFont()->setSize(9)->setBold(true);
+            $infoRow++;
 
             // Filter info
-            $infoRow = 4;
             if (!empty($search)) {
-                $sheet->setCellValue('A' . $infoRow, 'Filter Pencarian: ' . $search);
+                $sheet->setCellValue('A' . $infoRow, 'Pencarian: ' . $search);
                 $sheet->mergeCells('A' . $infoRow . ':K' . $infoRow);
                 $infoRow++;
             }
@@ -213,7 +264,7 @@ if ($format === 'excel') {
                 $sheet->getStyle($cell)->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
             }
 
-            // Data rows
+            // ✅ Data rows
             $row = $headerRow + 1;
             $no = 1;
 
@@ -223,14 +274,14 @@ if ($format === 'excel') {
                 $sheet->setCellValue('C' . $row, $user['email']);
                 $sheet->setCellValue('D' . $row, ucfirst($user['role']));
                 $sheet->setCellValue('E' . $row, $user['program_studi'] ?? '-');
-                $sheet->setCellValue('F' . $row, $user['semester'] ?? '-');
+                $sheet->setCellValue('F' . $row, formatSemester($user['semester']));
                 $sheet->setCellValue('G' . $row, getMembershipLabel($user));
                 $sheet->setCellValue('H' . $row, getStatusLabel($user));
-                $sheet->setCellValue('I' . $row, $user['membership_start'] ? date('d-m-Y', strtotime($user['membership_start'])) : '-');
-                $sheet->setCellValue('J' . $row, $user['membership_end'] ? date('d-m-Y', strtotime($user['membership_end'])) : '-');
+                $sheet->setCellValue('I' . $row, formatDateShort($user['membership_start']));
+                $sheet->setCellValue('J' . $row, formatDateShort($user['membership_end']));
                 $sheet->setCellValue('K' . $row, date('d-m-Y H:i', strtotime($user['created_at'])));
 
-                // Styling
+                // ✅ Styling
                 $cellRange = 'A' . $row . ':K' . $row;
                 $sheet->getStyle($cellRange)->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
                 
@@ -240,30 +291,33 @@ if ($format === 'excel') {
                 }
 
                 // Status color
-                $statusColor = 'FFF1F5F9';
                 $status = getStatusLabel($user);
-                if ($status === 'Active') {
-                    $statusColor = 'FFD1FAE5';
-                } elseif ($status === 'Pending') {
-                    $statusColor = 'FFFEF3C7';
-                }
+                $statusColor = ($status === 'Active') ? 'FFD1FAE5' : (($status === 'Pending') ? 'FFFEF3C7' : 'FFF1F5F9');
                 $sheet->getStyle('H' . $row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB($statusColor);
 
                 $row++;
                 $no++;
             }
 
+            // ✅ No data message
+            if (empty($users)) {
+                $sheet->setCellValue('A' . $row, 'Tidak ada data ditemukan');
+                $sheet->mergeCells('A' . $row . ':K' . $row);
+                $sheet->getStyle('A' . $row)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle('A' . $row)->getFont()->setItalic(true)->getColor()->setARGB('FF999999');
+            }
+
             // Freeze header
             $sheet->freezePane('A' . ($headerRow + 1));
 
-            // ✅ Clear ALL output buffers
+            // ✅ Clear buffers
             while (ob_get_level()) {
                 ob_end_clean();
             }
 
-            // Download headers
+            // Download
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Y-m-d_H-i') . '.xlsx"');
+            header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Ymd_His') . '.xlsx"');
             header('Cache-Control: max-age=0');
             header('Pragma: public');
 
@@ -278,17 +332,17 @@ if ($format === 'excel') {
             exit('Error generating Excel: ' . $e->getMessage());
         }
     } else {
-        // CSV Fallback
+        // ✅ CSV Fallback
         while (ob_get_level()) {
             ob_end_clean();
         }
 
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Y-m-d_H-i') . '.csv"');
+        header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Ymd_His') . '.csv"');
         header('Pragma: no-cache');
 
         $output = fopen('php://output', 'w');
-        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF)); // UTF-8 BOM
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
         
         fputcsv($output, ['No', 'Nama', 'Email', 'Role', 'Program Studi', 'Semester', 'Membership', 'Status', 'Tgl Mulai', 'Tgl Berakhir', 'Tgl Daftar']);
         
@@ -300,11 +354,11 @@ if ($format === 'excel') {
                 $user['email'],
                 ucfirst($user['role']),
                 $user['program_studi'] ?? '-',
-                $user['semester'] ?? '-',
+                formatSemester($user['semester']),
                 getMembershipLabel($user),
                 getStatusLabel($user),
-                $user['membership_start'] ? date('d-m-Y', strtotime($user['membership_start'])) : '-',
-                $user['membership_end'] ? date('d-m-Y', strtotime($user['membership_end'])) : '-',
+                formatDateShort($user['membership_start']),
+                formatDateShort($user['membership_end']),
                 date('d-m-Y H:i', strtotime($user['created_at']))
             ]);
         }
@@ -318,28 +372,13 @@ if ($format === 'excel') {
 // EXPORT PDF
 // =======================================
 if ($format === 'pdf') {
-    // Check vendor paths
-    $vendorPaths = [
-        __DIR__ . '/vendor/autoload.php',
-        '/home/site/wwwroot/vendor/autoload.php',
-        dirname(__DIR__) . '/vendor/autoload.php',
-    ];
-
-    $vendorFound = false;
-    foreach ($vendorPaths as $path) {
-        if (file_exists($path)) {
-            require_once $path;
-            $vendorFound = true;
-            break;
-        }
-    }
-
-    if ($vendorFound && class_exists('\Dompdf\Dompdf')) {
+    if (loadVendor() && class_exists('\Dompdf\Dompdf')) {
         try {
             $options = new \Dompdf\Options();
             $options->set('isHtml5ParserEnabled', true);
             $options->set('isPhpEnabled', false);
             $options->set('defaultFont', 'Arial');
+            $options->set('isRemoteEnabled', false);
 
             $html = '
             <!DOCTYPE html>
@@ -353,16 +392,16 @@ if ($format === 'pdf') {
                     .header { background: #667eea; color: white; padding: 15px; text-align: center; border-radius: 8px; margin-bottom: 15px; }
                     h1 { font-size: 20px; margin-bottom: 5px; }
                     .subtitle { font-size: 10px; }
-                    .stats { background: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+                    .stats { background: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 9px; }
                     .stats strong { color: #667eea; }
                     table { width: 100%; border-collapse: collapse; margin-top: 15px; }
                     thead { background: #667eea; color: white; }
-                    th { padding: 8px 5px; text-align: left; font-size: 9px; border: 1px solid #5568d3; }
-                    td { padding: 6px 5px; border: 1px solid #e0e0e0; font-size: 8px; }
+                    th { padding: 8px 4px; text-align: left; font-size: 9px; border: 1px solid #5568d3; }
+                    td { padding: 6px 4px; border: 1px solid #e0e0e0; font-size: 8px; }
                     tbody tr:nth-child(even) { background: #f9f9f9; }
-                    .status-active { background: #d1fae5; color: #059669; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-                    .status-pending { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-                    .status-free { background: #e2e3e5; color: #383d41; padding: 2px 6px; border-radius: 4px; }
+                    .status-active { background: #d1fae5; color: #059669; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 7px; }
+                    .status-pending { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 7px; }
+                    .status-free { background: #e2e3e5; color: #383d41; padding: 2px 6px; border-radius: 4px; font-size: 7px; }
                     .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #e0e0e0; font-size: 8px; color: #666; text-align: center; }
                 </style>
             </head>
@@ -374,13 +413,17 @@ if ($format === 'pdf') {
                         <p style="font-size: 9px; margin-top: 5px;">Dicetak: ' . date('d M Y H:i:s') . ' WIB</p>
                     </div>
                     <div class="stats">
-                        <strong>Total Pengguna:</strong> ' . $totalUsers . ' | 
-                        <strong>Students:</strong> ' . $countStudents . ' | 
-                        <strong>Mentors:</strong> ' . $countMentors . ' | 
-                        <strong>Subscribed:</strong> ' . $countSubscribed;
+                        <strong>Filtered:</strong> ' . $filteredStats['total'] . ' users | 
+                        <strong>Students:</strong> ' . $filteredStats['students'] . ' | 
+                        <strong>Mentors:</strong> ' . $filteredStats['mentors'] . ' | 
+                        <strong>Subscribed:</strong> ' . $filteredStats['subscribed'];
+            
+            if ($filter !== 'all' || !empty($search)) {
+                $html .= '<br><strong>GLOBAL:</strong> ' . $globalStats['total'] . ' total | ' . $globalStats['students'] . ' students | ' . $globalStats['mentors'] . ' mentors | ' . $globalStats['subscribed'] . ' subscribed';
+            }
             
             if (!empty($search)) {
-                $html .= ' | <strong>Pencarian:</strong> ' . htmlspecialchars($search);
+                $html .= '<br><strong>Pencarian:</strong> ' . htmlspecialchars($search);
             }
             if ($filter !== 'all') {
                 $html .= ' | <strong>Filter:</strong> ' . ucfirst($filter);
@@ -409,15 +452,15 @@ if ($format === 'pdf') {
                     <td>' . htmlspecialchars($user['email']) . '</td>
                     <td>' . ucfirst($user['role']) . '</td>
                     <td>' . htmlspecialchars($user['program_studi'] ?? '-') . '</td>
-                    <td style="text-align: center;">' . ($user['semester'] ?? '-') . '</td>
+                    <td style="text-align: center;">' . formatSemester($user['semester']) . '</td>
                     <td>' . getMembershipLabel($user) . '</td>
                     <td><span class="' . $statusClass . '">' . $status . '</span></td>
-                    <td>' . date('d-m-Y', strtotime($user['created_at'])) . '</td>
+                    <td>' . formatDateShort($user['created_at']) . '</td>
                 </tr>';
             }
 
             if (empty($users)) {
-                $html .= '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #999;">Tidak ada data</td></tr>';
+                $html .= '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #999;">Tidak ada data ditemukan</td></tr>';
             }
 
             $html .= '</tbody></table>
@@ -434,13 +477,17 @@ if ($format === 'pdf') {
             $dompdf->setPaper('A4', 'landscape');
             $dompdf->render();
 
+            // Page numbers
+            $canvas = $dompdf->getCanvas();
+            $canvas->page_text(720, 560, "Halaman {PAGE_NUM} dari {PAGE_COUNT}", null, 8, array(0, 0, 0));
+
             // ✅ Clear buffers
             while (ob_get_level()) {
                 ob_end_clean();
             }
 
             header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Y-m-d_H-i') . '.pdf"');
+            header('Content-Disposition: attachment; filename="Users_JagoNugas_' . date('Ymd_His') . '.pdf"');
             header('Pragma: public');
 
             echo $dompdf->output();
@@ -453,7 +500,7 @@ if ($format === 'pdf') {
             exit('Error generating PDF: ' . $e->getMessage());
         }
     } else {
-        // HTML Print Fallback
+        // ✅ HTML Print Fallback
         while (ob_get_level()) {
             ob_end_clean();
         }
@@ -469,11 +516,17 @@ if ($format === 'pdf') {
                 @media print { .no-print { display: none !important; } }
                 body { font-family: Arial, sans-serif; padding: 20px; }
                 .toolbar { margin-bottom: 20px; }
-                .btn { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                .btn { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px; }
+                .btn:hover { background: #5568d3; }
+                h1 { color: #667eea; }
+                .stats { background: #f0f0f0; padding: 10px; border-radius: 5px; margin: 15px 0; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
                 th { background: #667eea; color: white; }
                 tr:nth-child(even) { background: #f9f9f9; }
+                .status-active { background: #d1fae5; color: #059669; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+                .status-pending { background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+                .status-free { background: #e2e3e5; color: #383d41; padding: 2px 8px; border-radius: 4px; }
             </style>
         </head>
         <body>
@@ -481,8 +534,20 @@ if ($format === 'pdf') {
                 <button class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
                 <button class="btn" onclick="window.close()" style="background: #999;">❌ Close</button>
             </div>
+            
             <h1>📊 Data Pengguna JagoNugas</h1>
-            <p><strong>Total:</strong> <?= $totalUsers ?> users | <strong>Dicetak:</strong> <?= date('d M Y H:i') ?></p>
+            
+            <div class="stats">
+                <strong>Filtered:</strong> <?= $filteredStats['total'] ?> users | 
+                <strong>Students:</strong> <?= $filteredStats['students'] ?> | 
+                <strong>Mentors:</strong> <?= $filteredStats['mentors'] ?> | 
+                <strong>Subscribed:</strong> <?= $filteredStats['subscribed'] ?>
+                <?php if ($filter !== 'all' || !empty($search)): ?>
+                <br><strong>GLOBAL:</strong> <?= $globalStats['total'] ?> total | <?= $globalStats['students'] ?> students | <?= $globalStats['mentors'] ?> mentors
+                <?php endif; ?>
+                <br><strong>Dicetak:</strong> <?= date('d M Y H:i:s') ?>
+            </div>
+            
             <table>
                 <thead>
                     <tr>
@@ -494,6 +559,8 @@ if ($format === 'pdf') {
                     <?php 
                     $no = 1;
                     foreach ($users as $user): 
+                        $status = getStatusLabel($user);
+                        $statusClass = ($status === 'Active') ? 'status-active' : (($status === 'Pending') ? 'status-pending' : 'status-free');
                     ?>
                     <tr>
                         <td><?= $no++ ?></td>
@@ -501,12 +568,16 @@ if ($format === 'pdf') {
                         <td><?= htmlspecialchars($user['email']) ?></td>
                         <td><?= ucfirst($user['role']) ?></td>
                         <td><?= htmlspecialchars($user['program_studi'] ?? '-') ?></td>
-                        <td><?= $user['semester'] ?? '-' ?></td>
+                        <td><?= formatSemester($user['semester']) ?></td>
                         <td><?= getMembershipLabel($user) ?></td>
-                        <td><?= getStatusLabel($user) ?></td>
-                        <td><?= date('d-m-Y', strtotime($user['created_at'])) ?></td>
+                        <td><span class="<?= $statusClass ?>"><?= $status ?></span></td>
+                        <td><?= formatDateShort($user['created_at']) ?></td>
                     </tr>
                     <?php endforeach; ?>
+                    
+                    <?php if (empty($users)): ?>
+                    <tr><td colspan="9" style="text-align: center; color: #999;">Tidak ada data ditemukan</td></tr>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </body>
@@ -519,5 +590,4 @@ if ($format === 'pdf') {
 // Default: Invalid format
 ob_end_clean();
 http_response_code(400);
-exit('Invalid export format. Use: ?format=excel or ?format=pdf');
-?>
+exit('Invalid export format. Use: ?format=excel, pdf, or csv');
