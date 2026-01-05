@@ -4,6 +4,12 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/NotificationHelper.php';
 
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
+
+
 $BASE = defined('BASE_PATH') ? constant('BASE_PATH') : '';
 
 if (session_status() === PHP_SESSION_NONE) {

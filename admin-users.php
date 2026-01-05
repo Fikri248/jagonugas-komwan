@@ -9,10 +9,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// ✅ TRACK VISITOR
-if (file_exists(__DIR__ . '/track-visitor.php')) {
-    require_once __DIR__ . '/track-visitor.php';
-}
 
 function url_path(string $path = ''): string
 {
