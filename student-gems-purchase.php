@@ -1,8 +1,13 @@
 <?php
-// student-gems-purchase.php - FULL INLINE CSS VERSION (BUTTON TEXT CENTERED)
+// student-gems-purchase.php - DYNAMIC DATABASE VERSION
 session_start();
 require_once 'config.php';
 require_once 'db.php';
+
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header('Location: login.php');
@@ -18,11 +23,43 @@ $stmt = $pdo->prepare("SELECT * FROM gem_transactions WHERE user_id = ? ORDER BY
 $stmt->execute([$user_id]);
 $transactions = $stmt->fetchAll();
 
-$packages = [
-    'basic' => ['name' => 'Basic', 'price' => 10000, 'gems' => 4500, 'bonus' => 0, 'total_gems' => 4500, 'badge_color' => 'secondary', 'button_color' => 'dark'],
-    'pro' => ['name' => 'Pro', 'price' => 25000, 'gems' => 12500, 'bonus' => 500, 'total_gems' => 13000, 'badge_color' => 'primary', 'button_color' => 'primary', 'popular' => true],
-    'plus' => ['name' => 'Plus', 'price' => 50000, 'gems' => 27000, 'bonus' => 2000, 'total_gems' => 29000, 'badge_color' => 'warning', 'button_color' => 'warning', 'best_value' => true]
-];
+// ✅ FETCH PACKAGES FROM DATABASE (DYNAMIC)
+try {
+    $stmt = $pdo->query("SELECT * FROM gem_packages ORDER BY FIELD(code, 'basic', 'pro', 'plus')");
+    $dbPackages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Convert to associative array with additional display properties
+    $packages = [];
+    foreach ($dbPackages as $pkg) {
+        $code = strtolower($pkg['code']);
+        $packages[$code] = [
+            'name' => $pkg['name'],
+            'price' => (int)$pkg['price'],
+            'gems' => (int)$pkg['gems'],
+            'bonus' => (int)$pkg['bonus'],
+            'total_gems' => (int)$pkg['total_gems'],
+            // Display properties
+            'badge_color' => $code === 'basic' ? 'secondary' : ($code === 'pro' ? 'primary' : 'warning'),
+            'button_color' => $code === 'basic' ? 'dark' : ($code === 'pro' ? 'primary' : 'warning'),
+            'popular' => $code === 'pro',
+            'best_value' => $code === 'plus'
+        ];
+    }
+    
+    // Fallback jika database kosong
+    if (empty($packages)) {
+        throw new Exception("No packages found");
+    }
+    
+} catch (Exception $e) {
+    // Fallback to hardcoded values if database fails
+    error_log("Failed to fetch packages: " . $e->getMessage());
+    $packages = [
+        'basic' => ['name' => 'Basic', 'price' => 10000, 'gems' => 4500, 'bonus' => 0, 'total_gems' => 4500, 'badge_color' => 'secondary', 'button_color' => 'dark'],
+        'pro' => ['name' => 'Pro', 'price' => 25000, 'gems' => 12500, 'bonus' => 500, 'total_gems' => 13000, 'badge_color' => 'primary', 'button_color' => 'primary', 'popular' => true],
+        'plus' => ['name' => 'Plus', 'price' => 50000, 'gems' => 27000, 'bonus' => 2000, 'total_gems' => 29000, 'badge_color' => 'warning', 'button_color' => 'warning', 'best_value' => true]
+    ];
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -289,7 +326,6 @@ $packages = [
             transition: all 0.3s ease;
             border: none;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            /* FIX: Center text */
             display: flex !important;
             align-items: center;
             justify-content: center;
@@ -451,7 +487,7 @@ $packages = [
             <div class="col-lg-8 mx-auto">
                 <div class="card balance-card text-white shadow-lg">
                     <div class="card-body p-4">
-                        <div class="row align-items: center">
+                        <div class="row align-items-center">
                             <div class="col-md-8">
                                 <p class="mb-2 opacity-75"><i class="bi bi-person-circle me-2 fs-5"></i><?= htmlspecialchars($user['name']) ?></p>
                                 <h6 class="mb-2 opacity-75 fw-normal">Saldo Gem Saat Ini</h6>
@@ -487,7 +523,7 @@ $packages = [
 
                     <div class="card-body p-4 text-center">
                         <div class="mt-3 mb-2"><h2 class="price-tag mb-0">Rp <?= number_format($package['price'], 0, ',', '.') ?></h2></div>
-                        <div class="mb-3"><span class="package-name-badge bg-<?= $package['badge_color'] ?> text-white"><?= $package['name'] ?></span></div>
+                        <div class="mb-3"><span class="package-name-badge bg-<?= $package['badge_color'] ?> text-white"><?= htmlspecialchars($package['name']) ?></span></div>
                         <p class="text-muted small mb-4">Pembayaran sekali</p>
                         <div class="my-4"><i class="bi bi-gem gem-icon"></i></div>
                         <div class="gems-display">

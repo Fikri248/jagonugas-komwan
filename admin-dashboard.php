@@ -6,11 +6,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// ✅ TRACK VISITOR - Auto tracking
-if (file_exists(__DIR__ . '/track-visitor.php')) {
-    require_once __DIR__ . '/track-visitor.php';
-}
-
 /**
  * Helper URL: pakai BASE_PATH (baru), fallback ke BASEPATH (lama).
  */
@@ -63,7 +58,7 @@ try {
     ");
     $pendapatanBulan = (int) $stmt->fetchColumn();
     
-    // ✅ Visitor Stats (last 30 days) - FIXED: Ganti created_at jadi visited_at
+    // ✅ Visitor Stats (last 30 days)
     $visitorData = [];
     $visitorDates = [];
     $visitorCounts = [];
@@ -72,7 +67,6 @@ try {
     $tableCheck = $pdo->query("SHOW TABLES LIKE 'visitor_logs'")->fetchColumn();
     
     if ($tableCheck) {
-        // ✅ FIX: Ganti 'created_at' jadi 'visited_at'
         $stmt = $pdo->query("
             SELECT 
                 DATE(visited_at) as visit_date, 
@@ -480,42 +474,6 @@ function getStatusBadge($status) {
                         </tbody>
                     </table>
                     <?php endif; ?>
-                </div>
-            </section>
-            
-            <!-- Quick Actions -->
-            <section class="admin-section admin-quick-actions" style="grid-column: 1 / -1;">
-                <div class="admin-section-header">
-                    <h2><i class="bi bi-lightning-fill"></i> Aksi Cepat</h2>
-                </div>
-                <div class="admin-action-grid">
-                    <a href="<?php echo htmlspecialchars(url_path('admin-users.php')); ?>" class="admin-action-card">
-                        <div class="action-icon blue"><i class="bi bi-people-fill"></i></div>
-                        <span>Kelola Users</span>
-                    </a>
-                    <a href="<?php echo htmlspecialchars(url_path('admin-mentors.php')); ?>" class="admin-action-card">
-                        <div class="action-icon purple"><i class="bi bi-mortarboard-fill"></i></div>
-                        <span>Kelola Mentors</span>
-                        <?php if ($pendingMentors > 0): ?>
-                        <span class="badge-notification"><?php echo $pendingMentors; ?></span>
-                        <?php endif; ?>
-                    </a>
-                    <a href="<?php echo htmlspecialchars(url_path('admin-transactions.php')); ?>" class="admin-action-card">
-                        <div class="action-icon green"><i class="bi bi-credit-card-fill"></i></div>
-                        <span>Transaksi</span>
-                    </a>
-                    <a href="<?php echo htmlspecialchars(url_path('admin-forum.php')); ?>" class="admin-action-card">
-                        <div class="action-icon cyan"><i class="bi bi-chat-square-text-fill"></i></div>
-                        <span>Forum</span>
-                    </a>
-                    <a href="<?php echo htmlspecialchars(url_path('admin-packages.php')); ?>" class="admin-action-card">
-                        <div class="action-icon yellow"><i class="bi bi-box-fill"></i></div>
-                        <span>Paket Gem</span>
-                    </a>
-                    <a href="<?php echo htmlspecialchars(url_path('test-visitor.php')); ?>" class="admin-action-card">
-                        <div class="action-icon orange"><i class="bi bi-graph-up"></i></div>
-                        <span>Analytics</span>
-                    </a>
                 </div>
             </section>
         </div>

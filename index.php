@@ -1,6 +1,12 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
+
+
 $isLoggedIn = isset($_SESSION['user_id']);
 $role = $_SESSION['role'] ?? '';
 $name = $_SESSION['name'] ?? '';

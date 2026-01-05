@@ -8,6 +8,12 @@ $notifications = [];
 $unreadCount = 0;
 $totalEarnings = 0;
 
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
+
+
 // Helper untuk avatar URL (Google atau lokal)
 if (!function_exists('get_avatar_url')) {
     function get_avatar_url($avatar, $base = '') {

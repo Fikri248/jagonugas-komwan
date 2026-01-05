@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $bonus = (int) $data['bonus'];
                 $total_gems = $gems + $bonus;
                 
+                // ✅ UPDATE: Pakai total_gems yang baru dihitung
                 $stmt = $pdo->prepare("
                     UPDATE gem_packages 
                     SET name = ?, price = ?, gems = ?, bonus = ?, total_gems = ?, updated_at = NOW()
@@ -51,7 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
             
             $pdo->commit();
-            $success = 'Paket berhasil diperbarui!';
+            
+            // ✅ Clear cache setelah update (opsional tapi recommended)
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+            }
+            
+            $success = 'Paket berhasil diperbarui! Perubahan akan langsung terlihat di halaman student.';
+            
         } catch (Exception $e) {
             $pdo->rollBack();
             $error = 'Gagal memperbarui paket: ' . $e->getMessage();
@@ -60,7 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     // Handle Clear Cache
     if ($_POST['action'] === 'clear_cache') {
-        // Clear PHP opcache if available
         if (function_exists('opcache_reset')) {
             opcache_reset();
         }
@@ -69,18 +76,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // Get current packages
-$stmt = $pdo->query("SELECT * FROM gem_packages ORDER BY FIELD(code, 'basic', 'pro', 'plus')");
-$packages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->query("SELECT * FROM gem_packages ORDER BY FIELD(code, 'basic', 'pro', 'plus')");
+    $packages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $packages = [];
+    $error = 'Gagal memuat data paket: ' . $e->getMessage();
+}
 
 // Get system stats
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM users");
-$total_users = $stmt->fetch()['total'];
+try {
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM users");
+    $total_users = $stmt->fetch()['total'];
 
-$stmt = $pdo->query("SELECT COUNT(*) as total FROM gem_transactions");
-$total_transactions = $stmt->fetch()['total'];
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM gem_transactions");
+    $total_transactions = $stmt->fetch()['total'];
 
-$stmt = $pdo->query("SELECT SUM(amount) as total FROM gem_transactions WHERE transaction_status = 'settlement'");
-$total_revenue = $stmt->fetch()['total'] ?? 0;
+    $stmt = $pdo->query("SELECT SUM(amount) as total FROM gem_transactions WHERE transaction_status = 'settlement'");
+    $total_revenue = $stmt->fetch()['total'] ?? 0;
+} catch (PDOException $e) {
+    $total_users = 0;
+    $total_transactions = 0;
+    $total_revenue = 0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -397,35 +415,33 @@ $total_revenue = $stmt->fetch()['total'] ?? 0;
             margin-bottom: 1rem;
         }
 
-        .quick-link {
-            padding: 12px 16px;
-            background: #f8fafc;
-            border-radius: 10px;
-            text-decoration: none;
-            color: #1e293b;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transition: all 0.3s;
-            border: 2px solid transparent;
-        }
-
-        .quick-link:hover {
-            background: #e2e8f0;
-            border-color: #667eea;
-            transform: translateX(5px);
-        }
-
-        .quick-link i {
-            font-size: 1.3rem;
-            color: #667eea;
-        }
-
         .divider {
             margin: 24px 0;
             border: none;
             border-top: 2px solid #f1f5f9;
+        }
+
+        /* ✅ NEW: Info box for student page sync */
+        .sync-info {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            border: 2px solid #3b82f6;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sync-info i {
+            font-size: 1.5rem;
+            color: #1e40af;
+        }
+
+        .sync-info p {
+            margin: 0;
+            color: #1e3a8a;
+            font-size: 0.9rem;
         }
 
         @media (max-width: 768px) {
@@ -492,6 +508,12 @@ $total_revenue = $stmt->fetch()['total'] ?? 0;
                 <h3><i class="bi bi-gem"></i> Pengaturan Paket Gems</h3>
             </div>
             <div class="card-body-custom">
+                <!-- ✅ NEW: Sync Info -->
+                <div class="sync-info">
+                    <i class="bi bi-info-circle-fill"></i>
+                    <p><strong>Auto-Sync:</strong> Perubahan harga dan jumlah gems akan <strong>langsung terlihat</strong> di halaman student purchase gems tanpa perlu refresh manual.</p>
+                </div>
+
                 <form method="POST" action="" id="packageForm">
                     <input type="hidden" name="action" value="update_packages">
 
@@ -635,33 +657,6 @@ $total_revenue = $stmt->fetch()['total'] ?? 0;
                 </div>
             </div>
         </div>
-
-        <!-- Quick Links -->
-        <div class="settings-card">
-            <div class="card-header-custom">
-                <h3><i class="bi bi-link-45deg"></i> Quick Links</h3>
-            </div>
-            <div class="card-body-custom">
-                <div style="display: grid; gap: 12px;">
-                    <a href="<?= url_path('admin-users.php') ?>" class="quick-link">
-                        <i class="bi bi-people-fill"></i>
-                        <span>Kelola Users</span>
-                    </a>
-                    <a href="<?= url_path('admin-mentors.php') ?>" class="quick-link">
-                        <i class="bi bi-mortarboard-fill"></i>
-                        <span>Kelola Mentors</span>
-                    </a>
-                    <a href="<?= url_path('admin-transactions.php') ?>" class="quick-link">
-                        <i class="bi bi-credit-card-fill"></i>
-                        <span>Transaksi</span>
-                    </a>
-                    <a href="<?= url_path('admin-forum.php') ?>" class="quick-link">
-                        <i class="bi bi-chat-square-text-fill"></i>
-                        <span>Forum Management</span>
-                    </a>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -694,13 +689,21 @@ $total_revenue = $stmt->fetch()['total'] ?? 0;
                 if (parseInt(input.value) < 1000) {
                     hasError = true;
                     input.style.borderColor = '#dc2626';
+                } else {
+                    input.style.borderColor = '#e2e8f0';
                 }
             });
 
             if (hasError) {
                 e.preventDefault();
                 alert('Harga minimal adalah Rp 1.000');
+                return false;
             }
+
+            // ✅ Show loading state
+            const submitBtn = this.querySelector('.btn-save');
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Menyimpan...';
+            submitBtn.disabled = true;
         });
 
         // Auto-hide alerts

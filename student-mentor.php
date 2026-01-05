@@ -5,6 +5,12 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
+
+
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ' . BASE_PATH . '/login.php');

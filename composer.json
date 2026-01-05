@@ -1,5 +1,7 @@
 {
     "require": {
-        "phpmailer/phpmailer": "^7.0"
+        "phpmailer/phpmailer": "^7.0",
+        "phpoffice/phpspreadsheet": "^5.3",
+        "dompdf/dompdf": "*"
     }
 }
