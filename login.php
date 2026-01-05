@@ -8,7 +8,6 @@ if (file_exists(__DIR__ . '/track-visitor.php')) {
     require_once __DIR__ . '/track-visitor.php';
 }
 
-
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -57,8 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password wajib diisi.';
     } else {
         try {
-            $db   = (new Database())->getConnection();
-            $user = new User($db);
+            // ✅ Use $pdo from db.php instead of Database class
+            $user = new User($pdo);
 
             $user->email    = $oldEmail;
             $user->password = $password;
@@ -70,12 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $u    = $loginResult['user'] ?? [];
                     $role = $u['role'] ?? 'student';
 
+                    // ✅ FIX: Check is_approved for mentors (not is_verified)
                     if (
                         $role === 'mentor'
-                        && array_key_exists('is_verified', $u)
-                        && !$u['is_verified']
+                        && array_key_exists('is_approved', $u)
+                        && !$u['is_approved']
                     ) {
-                        $error = 'Akun mentor belum diverifikasi. Tunggu konfirmasi dari admin.';
+                        $error = 'Akun mentor belum disetujui. Tunggu konfirmasi dari admin.';
                     } else {
                         session_regenerate_id(true);
 
@@ -83,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['name']       = $u['name'] ?? '';
                         $_SESSION['email']      = $u['email'] ?? $oldEmail;
                         $_SESSION['role']       = $role;
+                        $_SESSION['gems']       = $u['gems'] ?? 0;
                         $_SESSION['login_time'] = time();
                         $_SESSION['avatar']     = $u['avatar'] ?? null;
 
@@ -99,7 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['name']       = $user->name ?? '';
                     $_SESSION['email']      = $oldEmail;
                     $_SESSION['role']       = $user->role ?? 'student';
+                    $_SESSION['gems']       = $user->gems ?? 0;
                     $_SESSION['login_time'] = time();
+                    $_SESSION['avatar']     = $user->avatar ?? null;
 
                     redirect_by_role($_SESSION['role']);
                 } else {
@@ -107,6 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } catch (Throwable $e) {
+            error_log('Login Error: ' . $e->getMessage());
             $error = 'Terjadi kesalahan sistem. Silakan coba lagi.';
         }
     }

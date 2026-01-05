@@ -8,7 +8,6 @@ if (file_exists(__DIR__ . '/track-visitor.php')) {
     require_once __DIR__ . '/track-visitor.php';
 }
 
-
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -35,7 +34,7 @@ function redirect_by_role(string $role): void
             header('Location: ' . url_path('mentor-dashboard.php'));
             break;
         default:
-            header('Location: ' . url_path('dashboard.php'));
+            header('Location: ' . url_path('student-dashboard.php'));
             break;
     }
     exit;
@@ -67,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password wajib diisi';
     } else {
         try {
-            $db = (new Database())->getConnection();
-            $user = new User($db);
+            // ✅ Use $pdo from db.php instead of Database class
+            $user = new User($pdo);
 
             $user->email = $oldEmail;
             $user->password = $password;
@@ -82,8 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($role !== 'mentor') {
                         $error = 'Akun ini bukan akun mentor. Silakan login di halaman utama.';
-                    } elseif (array_key_exists('is_verified', $u) && !$u['is_verified']) {
-                        $error = 'Akun mentor belum diverifikasi oleh admin. Mohon tunggu 1x24 jam.';
+                    } elseif (array_key_exists('is_approved', $u) && !$u['is_approved']) {
+                        // ✅ FIX: Changed is_verified to is_approved
+                        $error = 'Akun mentor belum disetujui oleh admin. Mohon tunggu 1x24 jam.';
                     } else {
                         session_regenerate_id(true);
 
@@ -113,6 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['name'] = $user->name ?? '';
                         $_SESSION['email'] = $oldEmail;
                         $_SESSION['role'] = $role;
+                        $_SESSION['gems'] = $user->gems ?? 0;
+                        $_SESSION['avatar'] = $user->avatar ?? null;
                         $_SESSION['login_time'] = time();
 
                         header('Location: ' . url_path('mentor-dashboard.php'));
@@ -125,6 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Terjadi kesalahan saat login. Coba lagi.';
             }
         } catch (Throwable $e) {
+            error_log('Mentor Login Error: ' . $e->getMessage());
             $error = 'Terjadi kesalahan server. Coba lagi nanti.';
         }
     }

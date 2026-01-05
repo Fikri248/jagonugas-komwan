@@ -1,15 +1,27 @@
 <?php
-// sync-user-membership.php
+// sync-user-membership.php - UPDATED WITH AUTO UPGRADE
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
+
+// ✅ TRACK VISITOR
+if (file_exists(__DIR__ . '/track-visitor.php')) {
+    require_once __DIR__ . '/track-visitor.php';
+}
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+function url_path(string $path = ''): string
+{
+    $base = defined('BASE_PATH') ? (string) constant('BASE_PATH') : '';
+    $path = '/' . ltrim($path, '/');
+    return $base . ($path === '/' ? '' : $path);
+}
+
 // Only admin can run this
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
+    header("Location: " . url_path('login.php'));
     exit;
 }
 
@@ -38,21 +50,22 @@ try {
     $pendingUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     $synced = 0;
+    $upgraded = 0;
     $errors = [];
     
     foreach ($pendingUsers as $transaction) {
         try {
-            // Get package ID from gem_packages
-            $stmtPkg = $pdo->prepare("SELECT id FROM gem_packages WHERE code = ?");
+            // Get package details from gem_packages
+            $stmtPkg = $pdo->prepare("SELECT id, price, code FROM gem_packages WHERE code = ?");
             $stmtPkg->execute([$transaction['package']]);
-            $packageId = $stmtPkg->fetchColumn();
+            $newPackage = $stmtPkg->fetch(PDO::FETCH_ASSOC);
             
-            if (!$packageId) {
+            if (!$newPackage) {
                 $errors[] = "Package '{$transaction['package']}' not found for user {$transaction['name']}";
                 continue;
             }
             
-            // Check if membership already exists for this date
+            // Check if membership already exists for this exact payment date
             $stmtCheck = $pdo->prepare("
                 SELECT id FROM memberships 
                 WHERE user_id = ? 
@@ -61,28 +74,90 @@ try {
             $stmtCheck->execute([$transaction['user_id'], $transaction['paid_at']]);
             
             if ($stmtCheck->fetchColumn()) {
-                // Already synced
+                // Already synced for this payment date
                 continue;
             }
             
-            // Create membership (30 days from payment date)
-            $stmtInsert = $pdo->prepare("
-                INSERT INTO memberships 
-                (user_id, membership_id, start_date, end_date, status, created_at) 
-                VALUES (?, ?, ?, DATE_ADD(?, INTERVAL 30 DAY), 'active', NOW())
+            // ✅ CHECK FOR EXISTING ACTIVE MEMBERSHIP (AUTO UPGRADE LOGIC)
+            $stmtCurrent = $pdo->prepare("
+                SELECT m.id, m.membership_id, m.end_date, gp.price as current_price, gp.code as current_code
+                FROM memberships m
+                JOIN gem_packages gp ON m.membership_id = gp.id
+                WHERE m.user_id = ? 
+                AND m.status = 'active' 
+                AND m.end_date >= NOW()
+                ORDER BY gp.price DESC 
+                LIMIT 1
             ");
+            $stmtCurrent->execute([$transaction['user_id']]);
+            $currentMembership = $stmtCurrent->fetch(PDO::FETCH_ASSOC);
             
-            $stmtInsert->execute([
-                $transaction['user_id'],
-                $packageId,
-                $transaction['paid_at'],
-                $transaction['paid_at']
-            ]);
-            
-            // Log success
-            error_log("Synced membership for user {$transaction['user_id']} - {$transaction['name']} - Order: {$transaction['order_id']}");
-            
-            $synced++;
+            if ($currentMembership) {
+                // User already has active membership
+                $currentPrice = floatval($currentMembership['current_price']);
+                $newPrice = floatval($newPackage['price']);
+                
+                if ($newPrice > $currentPrice) {
+                    // ✅ UPGRADE: New package is higher
+                    // Expire old membership
+                    $stmtExpire = $pdo->prepare("
+                        UPDATE memberships 
+                        SET status = 'upgraded', end_date = NOW() 
+                        WHERE id = ?
+                    ");
+                    $stmtExpire->execute([$currentMembership['id']]);
+                    
+                    // Create new higher membership
+                    $stmtInsert = $pdo->prepare("
+                        INSERT INTO memberships 
+                        (user_id, membership_id, start_date, end_date, status, created_at) 
+                        VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 'active', NOW())
+                    ");
+                    $stmtInsert->execute([
+                        $transaction['user_id'],
+                        $newPackage['id']
+                    ]);
+                    
+                    error_log("UPGRADED membership for user {$transaction['user_id']} from {$currentMembership['current_code']} to {$newPackage['code']}");
+                    $upgraded++;
+                    $synced++;
+                    
+                } elseif ($newPrice == $currentPrice) {
+                    // ✅ EXTEND: Same package, extend duration
+                    $stmtExtend = $pdo->prepare("
+                        UPDATE memberships 
+                        SET end_date = DATE_ADD(end_date, INTERVAL 30 DAY) 
+                        WHERE id = ?
+                    ");
+                    $stmtExtend->execute([$currentMembership['id']]);
+                    
+                    error_log("EXTENDED membership for user {$transaction['user_id']} - Package: {$newPackage['code']}");
+                    $synced++;
+                    
+                } else {
+                    // ✅ DOWNGRADE: Lower package, ignore (keep current higher membership)
+                    error_log("IGNORED lower package purchase for user {$transaction['user_id']} - Current: {$currentMembership['current_code']}, New: {$newPackage['code']}");
+                    continue;
+                }
+                
+            } else {
+                // ✅ NEW MEMBERSHIP: No active membership, create new
+                $stmtInsert = $pdo->prepare("
+                    INSERT INTO memberships 
+                    (user_id, membership_id, start_date, end_date, status, created_at) 
+                    VALUES (?, ?, ?, DATE_ADD(?, INTERVAL 30 DAY), 'active', NOW())
+                ");
+                
+                $stmtInsert->execute([
+                    $transaction['user_id'],
+                    $newPackage['id'],
+                    $transaction['paid_at'],
+                    $transaction['paid_at']
+                ]);
+                
+                error_log("NEW membership for user {$transaction['user_id']} - {$transaction['name']} - Order: {$transaction['order_id']}");
+                $synced++;
+            }
             
         } catch (PDOException $e) {
             $errors[] = "Error for user {$transaction['name']}: " . $e->getMessage();
@@ -92,7 +167,11 @@ try {
     
     // Set success message
     if ($synced > 0) {
-        $_SESSION['success'] = "Berhasil sync {$synced} membership!";
+        $message = "Berhasil sync {$synced} membership!";
+        if ($upgraded > 0) {
+            $message .= " ({$upgraded} upgraded ke package lebih tinggi)";
+        }
+        $_SESSION['success'] = $message;
     } else {
         $_SESSION['success'] = "Tidak ada membership yang perlu di-sync.";
     }
@@ -108,6 +187,6 @@ try {
 }
 
 // Redirect back to users page
-header("Location: admin-users.php");
+header("Location: " . url_path('admin-users.php'));
 exit;
 ?>
