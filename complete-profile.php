@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Email sudah terdaftar. Silakan login.';
             } else {
                 // Buat user baru
-                $bonusGems = 75;
+                $bonusGems = 500;
                 $hashedPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
 
                 $insertStmt = $db->prepare("
@@ -250,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- Bonus Info -->
             <div class="bonus-info">
                 <i class="bi bi-gift-fill"></i>
-                <span>Kamu akan mendapat <strong>75 Gem gratis!</strong></span>
+                <span>Kamu akan mendapat <strong>500 Gem gratis!</strong></span>
             </div>
 
             <button type="submit" class="btn btn-primary">

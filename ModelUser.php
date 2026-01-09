@@ -27,7 +27,7 @@ class User
     public $programstudi;    // versi lama (tanpa underscore)
 
     // Constants
-    const SIGNUP_BONUS_GEMS = 75;
+    const SIGNUP_BONUS_GEMS = 500;
     const ROLE_STUDENT = 'student';
     const ROLE_MENTOR  = 'mentor';
     const ROLE_ADMIN   = 'admin';

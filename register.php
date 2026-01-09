@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!empty($result['success'])) {
                 $newUserId = (int)($result['user_id'] ?? 0);
-                $bonusGems = (int)($result['gems'] ?? 75);
+                $bonusGems = (int)($result['gems'] ?? 500);
 
                 try {
                     $notif = new NotificationHelper($db);
@@ -287,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="register-bonus-info">
                 <i class="bi bi-gift-fill"></i>
-                <span>Daftar sekarang & dapatkan <strong>75 Gem gratis!</strong></span>
+                <span>Daftar sekarang & dapatkan <strong>500 Gem gratis!</strong></span>
             </div>
 
             <button type="submit" class="btn btn-primary auth-button">Daftar Sekarang</button>
